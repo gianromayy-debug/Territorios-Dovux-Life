@@ -1,9 +1,5 @@
-# FactionOS v1.1.3 — Monochrome Fix
+# FactionOS v1.2 — Actos delictivos
 
-Corrección real del tema monocromático. La versión anterior seguía tomando el color de la organización desde JavaScript y reemplazaba la paleta blanca. Esta versión separa el color de la organización de la interfaz general.
+Nueva pestaña para administrar robos medianos, robos grandes y encargos. Cada actividad puede marcarse como realizada y FactionOS calcula automáticamente su próxima disponibilidad.
 
-## Resultado
-- Interfaz negra/grafito
-- Blanco brillante como acento principal
-- Color de la organización reservado para mapas, perfiles y datos específicos
-- Archivos CSS/JS renombrados para evitar caché de GitHub Pages y del navegador
+Los actos con regla “una vez por día” quedan disponibles cuando se cumplen ambas condiciones: pasaron 12 horas y comenzó el día siguiente.
