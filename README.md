@@ -1,3 +1,3 @@
-# Dovux War Panel v1.6
+# Dovux War Panel v1.7
 
-Mapa con selección por clic cercano, ficha de estadísticas, pines editables, graffitis y recomendaciones.
+Modo operativo + administración. Panel de atención, recomendación, ficha rápida y mapa interactivo.
