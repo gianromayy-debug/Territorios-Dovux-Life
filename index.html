@@ -1,41 +1,123 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dovux War Panel</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <div class="app">
+  <header class="topbar">
+    <div>
+      <div class="kicker">DOVUXGAMES · SIXNINE OPERATIONS · v1.1 ALPHA</div>
+      <h1>Dovux War Panel</h1>
+    </div>
+    <div class="top-actions">
+      <button id="btnMapLS" class="pill active">Los Santos</button>
+      <button id="btnMapNorth" class="pill">Norte</button>
+      <button id="btnDraw" class="primary">Dibujar</button>
+      <button id="btnFinish" class="warning hidden">Cerrar</button>
+      <button id="btnCancel" class="ghost hidden">Cancelar</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="map-panel">
+      <div class="hud">
+        <div><span>Próximo turno</span><b id="nextTurn">--:--</b></div>
+        <div><span>Graffitis disponibles</span><b>4</b></div>
+        <div><span>Activos</span><b id="activeSprays">0</b></div>
+        <div><span>Críticos</span><b id="criticalCount">0</b></div>
+      </div>
+      <div class="map-wrap">
+        <svg id="mapSvg" viewBox="0 0 1131 918" aria-label="Mapa táctico"></svg>
+      </div>
+    </section>
+
     <aside class="sidebar">
-      <div class="brand"><span class="dot"></span><div><h1>DOVUX</h1><p>WAR PANEL</p></div></div>
-      <button class="nav active" data-view="dashboard">Dashboard</button>
-      <button class="nav" data-view="territorios">Territorios</button>
-      <button class="nav" data-view="graffitis">Graffitis</button>
-      <button class="nav" data-view="config">Config</button>
-      <div class="clock"><small>Próximo turno</small><strong id="nextShift">--:--</strong><span id="shiftCountdown">--</span></div>
-    </aside>
-    <main>
-      <header class="topbar"><div><h2>Centro de Guerra SixNine</h2><p>Control de territorios, reputación y graffitis</p></div><button id="exportBtn">Exportar datos</button></header>
-      <section id="dashboard" class="view active">
-        <div class="stats">
-          <article><span id="ownedCount">0</span><p>Conquistados</p></article>
-          <article><span id="targetCount">0</span><p>Objetivos</p></article>
-          <article><span id="sprayCount">0</span><p>Graffitis activos</p></article>
-          <article><span id="riskCount">0</span><p>En riesgo</p></article>
+      <section class="card commander">
+        <h2>🧠 Comandante</h2>
+        <div id="recommendations" class="recommendations"></div>
+      </section>
+
+      <section class="card" id="editorEmpty">
+        <h2>Territorio</h2>
+        <p class="muted">Tocá un territorio del mapa o dibujá uno nuevo.</p>
+      </section>
+
+      <section class="card hidden" id="editor">
+        <div class="editor-head">
+          <h2 id="selectedTitle">Territorio</h2>
+          <span id="selectedId" class="tag"></span>
         </div>
-        <div class="layout">
-          <section class="map-card"><div class="tabs"><button class="tab active" data-map="los_santos">Los Santos</button><button class="tab" data-map="norte">Norte</button></div><div class="map-wrap"><img id="mapImg" src="assets/mapas/los_santos.png" alt="Mapa Dovux" /></div></section>
-          <aside class="commander"><h3>IA Comandante</h3><div id="recommendations"></div></aside>
+
+        <label>Nombre</label>
+        <input id="nameInput" placeholder="Ej: Davis Norte" />
+
+        <div class="grid2">
+          <div>
+            <label>Controla</label>
+            <select id="gangInput"></select>
+          </div>
+          <div>
+            <label>Prioridad</label>
+            <select id="priorityInput">
+              <option value="mantener">Mantener</option>
+              <option value="conquistar">Conquistar</option>
+              <option value="ignorar">Ignorar</option>
+            </select>
+          </div>
+        </div>
+
+        <label>Reputación SixNine</label>
+        <select id="repInput">
+          <option value="0">Sin reputación</option>
+          <option value="10">Muy baja</option>
+          <option value="25">Baja</option>
+          <option value="50">Media</option>
+          <option value="75">Alta</option>
+          <option value="100">Muy alta</option>
+          <option value="101">Territorio conquistado</option>
+        </select>
+
+        <label>Graffitis activos</label>
+        <div id="spraySlots" class="spray-slots"></div>
+        <div class="button-row">
+          <button id="addSpray" class="primary">+ Agregar ahora</button>
+          <button id="clearSprays" class="ghost">Limpiar</button>
+        </div>
+
+        <label>Notas</label>
+        <textarea id="notesInput" placeholder="Ubicación de graffitis, conflictos, etc."></textarea>
+
+        <div class="button-row">
+          <button id="saveTerritory" class="primary">Guardar</button>
+          <button id="deleteTerritory" class="danger">Eliminar</button>
         </div>
       </section>
-      <section id="territorios" class="view"><div class="section-title"><h2>Territorios</h2><button id="addTerritory">+ Agregar</button></div><div id="territoryGrid" class="grid"></div></section>
-      <section id="graffitis" class="view"><h2>Graffitis activos</h2><div id="graffitiList" class="grid"></div></section>
-      <section id="config" class="view"><h2>Configuración</h2><div class="panel"><button id="resetDemo">Reiniciar demo</button><button id="importBtn">Importar JSON</button><textarea id="importBox" placeholder="Pegá aquí datos exportados"></textarea></div></section>
-    </main>
-  </div>
-  <dialog id="territoryDialog"><form method="dialog"><h3 id="dialogTitle">Territorio</h3><input id="tName" placeholder="Nombre" /><select id="tOwner"></select><select id="tPriority"><option value="mantener">Mantener</option><option value="conquistar">Conquistar</option><option value="ignorar">Ignorar</option></select><select id="tRep"><option value="10">Muy baja</option><option value="25">Baja</option><option value="50">Media</option><option value="75">Alta</option><option value="100">Muy alta</option><option value="101">Conquistado</option></select><input id="tSprays" type="number" min="0" max="3" placeholder="Graffitis" /><menu><button value="cancel">Cancelar</button><button id="saveTerritory" value="default">Guardar</button></menu></form></dialog>
-  <script src="js/data.js"></script><script src="js/app.js"></script>
+
+      <section class="card">
+        <h2>📊 Estado</h2>
+        <div id="summary"></div>
+      </section>
+
+      <section class="card">
+        <h2>🗂️ Datos</h2>
+        <p class="muted">Exportá un backup antes de subir versiones nuevas.</p>
+        <div class="button-row">
+          <button id="exportData" class="ghost">Exportar</button>
+          <button id="importData" class="ghost">Importar</button>
+        </div>
+        <textarea id="dataBox" placeholder="JSON de backup"></textarea>
+      </section>
+    </aside>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/graffitis.js"></script>
+  <script src="js/commander.js"></script>
+  <script src="js/mapa.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
