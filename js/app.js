@@ -20,6 +20,7 @@ const views={
   graffiti:{title:'Graffitis',kicker:'Vencimientos y turnos'},
   logistics:{title:'Logistics',kicker:'Propiedades e inventarios'},
   events:{title:'Events',kicker:'Agenda de la organización'},
+  members:{title:'Members',kicker:'Integrantes y roles de la organización'},
   builder:{title:'Builder',kicker:'Configuración visual del workspace'},
   settings:{title:'Settings',kicker:'Reglas, identidad y respaldos'}
 };
@@ -55,7 +56,8 @@ function applyBrand(){
   $('#workspaceLabel').textContent=data.workspace.name;
   $('#sidebarWorkspace').textContent=data.workspace.name;
   $('#sidebarServer').textContent=data.workspace.server;
-  $('.brand-mark').textContent=(data.workspace.logo||data.workspace.name||'F').slice(0,1).toUpperCase();
+  const brandMark=$('.brand-mark');
+  if(data.workspace.logoImage){brandMark.innerHTML=`<img src="${esc(data.workspace.logoImage)}" alt="Logo">`}else{brandMark.textContent=(data.workspace.logo||data.workspace.name||'F').slice(0,1).toUpperCase()}
 }
 function persist(message){saveData(data);if(message)toast(message);renderCurrent();}
 function navigate(view){
@@ -68,7 +70,7 @@ function navigate(view){
   renderCurrent();
 }
 function renderCurrent(){
-  ({dashboard:renderDashboard,operations:renderOperations,graffiti:renderGraffiti,logistics:renderLogistics,events:renderEvents,builder:renderBuilder,settings:renderSettings}[currentView])();
+  ({dashboard:renderDashboard,operations:renderOperations,graffiti:renderGraffiti,logistics:renderLogistics,events:renderEvents,members:renderMembers,builder:renderBuilder,settings:renderSettings}[currentView])();
 }
 function updateClock(){
   const n=getNextTurn(data.rules.turns);
@@ -78,37 +80,126 @@ function updateClock(){
 }
 function renderDashboard(){
   const root=$('#dashboard');
-  const states=data.territories.map(t=>territoryState(t,data.rules));
-  const active=data.territories.reduce((n,t)=>n+activeGraffitis(t).length,0);
-  const risk=states.filter(s=>s.key==='risk').length;
-  const safe=states.filter(s=>s.key==='safe').length;
+  const now=Date.now();
+  const states=data.territories.map(t=>({territory:t,state:territoryState(t,data.rules)}));
+  const activeGraffitiCount=data.territories.reduce((n,t)=>n+activeGraffitis(t).length,0);
+  const riskTerritories=states.filter(x=>x.state.key==='risk');
+  const safeTerritories=states.filter(x=>x.state.key==='safe');
   const recs=recommendation(data);
-  const expiry=data.territories.flatMap(t=>activeGraffitis(t).map(g=>({t,g,h:hoursUntil(g.expiresAt)}))).sort((a,b)=>a.h-b.h).slice(0,6);
+  const expiries=data.territories
+    .flatMap(t=>activeGraffitis(t).map(g=>({type:'territory',territory:t,g,h:hoursUntil(g.expiresAt)})))
+    .sort((a,b)=>a.h-b.h);
+  const inventoryRows=data.properties.flatMap(p=>(p.categories||[]).flatMap(c=>(c.items||[]).map(i=>({property:p,category:c,item:i}))));
+  const totalUnits=inventoryRows.reduce((n,x)=>n+(Number(x.item.quantity)||0),0);
+  const lowStock=inventoryRows.filter(x=>(Number(x.item.quantity)||0)<=Number(x.item.minStock??3));
+  const upcomingEvents=[...data.events].filter(e=>new Date(e.date).getTime()>=now).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const activeMembers=(data.members||[]).filter(m=>(m.status||'active')==='active');
+  const alerts=[];
+  expiries.filter(x=>x.h<=24).slice(0,3).forEach(x=>alerts.push({kind:x.h<=12?'danger':'warn',icon:'◉',title:x.territory.name,text:x.h<=12?'Un graffiti vence pronto':'Vencimiento dentro de 24 horas',meta:timeHuman(x.h),target:'territory',id:x.territory.id}));
+  riskTerritories.filter(x=>!alerts.some(a=>a.id===x.territory.id)).slice(0,2).forEach(x=>alerts.push({kind:'danger',icon:'◎',title:x.territory.name,text:'Territorio que requiere atención',meta:x.state.label,target:'territory',id:x.territory.id}));
+  lowStock.slice(0,2).forEach(x=>alerts.push({kind:'warn',icon:'▣',title:x.item.name,text:`Stock bajo en ${x.property.name}`,meta:`${Number(x.item.quantity)||0} ${x.item.unit||'unidades'}`,target:'property',id:x.property.id}));
+  upcomingEvents.slice(0,2).forEach(e=>{const h=(new Date(e.date).getTime()-now)/36e5;if(h<=48)alerts.push({kind:'info',icon:'◷',title:e.name,text:e.type||'Evento próximo',meta:timeHuman(h),target:'event',id:e.id})});
+  const visibleAlerts=alerts.slice(0,6);
+  const nextEvent=upcomingEvents[0];
   root.innerHTML=`
-    <div class="page-grid stats-grid">
-      ${stat('Territorios seguros',safe,'Con 3 graffitis o más')}
-      ${stat('Requieren atención',risk,'Prioridad operativa')}
-      ${stat('Graffitis activos',active,'En todos los territorios')}
-      ${stat('Propiedades',data.properties.length,'Depósitos configurados')}
+    <div class="dashboard-hero card">
+      <div class="dashboard-hero-texture"></div>
+      <div class="workspace-identity">
+        ${workspaceLogoHtml('workspace-logo-large')}
+        <div class="workspace-copy">
+          <span class="eyebrow">${esc(data.workspace.server||'Servidor sin definir')}</span>
+          <h2>${esc(data.workspace.name||'Organización')}</h2>
+          <p>${esc(data.workspace.description||'Agregá una descripción breve de la organización desde Ajustes.')}</p>
+          <div class="workspace-chips">
+            <span class="status-chip"><i></i>${esc(data.workspace.status||'Activa')}</span>
+            <span>${(data.members||[]).length} integrantes</span>
+            <span>${data.properties.length} propiedades</span>
+          </div>
+        </div>
+      </div>
+      <div class="hero-actions">
+        <button class="btn glass" id="editWorkspaceDashboard">Editar identidad</button>
+        <button class="btn primary" id="openOperationsDashboard">Abrir centro de operaciones</button>
+      </div>
     </div>
-    <div class="dashboard-layout">
-      <div class="card section-card">
-        <div class="section-head"><div><h2>Centro de operaciones</h2><p>Lo que requiere atención ahora.</p></div><span class="pill ${risk?'danger':'good'}">${risk?`${risk} alertas`:'Todo estable'}</span></div>
-        <div class="action-list">
-          ${expiry.length?expiry.map(x=>actionRow(x.t.name,x.h<=12?'Vence pronto':'Vencimiento programado',timeHuman(x.h),x.h<=12?'danger':x.h<=24?'warn':'info')).join(''):'<div class="empty-state">Todavía no hay graffitis activos.</div>'}
+
+    <div class="dashboard-module-grid">
+      ${dashboardModuleCard('operations','◎','Operaciones',`${riskTerritories.length} requieren atención`,`${safeTerritories.length} seguros · ${activeGraffitiCount} graffitis`,riskTerritories.length?'danger':'good')}
+      ${dashboardModuleCard('logistics','▣','Logística',`${data.properties.length} propiedades`,`${inventoryRows.length} objetos · ${totalUnits} unidades`,lowStock.length?'warn':'good',lowStock.length?`${lowStock.length} stock bajo`:null)}
+      ${dashboardModuleCard('events','◷','Agenda',nextEvent?nextEvent.name:'Sin eventos próximos',nextEvent?fmtDate(nextEvent.date):'Creá invasiones, cortes y reuniones',nextEvent?'info':'neutral')}
+      ${dashboardModuleCard('members','👥','Integrantes',`${(data.members||[]).length} registrados`,`${activeMembers.length} activos`,activeMembers.length?'good':'neutral')}
+    </div>
+
+    <div class="dashboard-main-grid">
+      <section class="card section-card dashboard-attention">
+        <div class="section-head">
+          <div><span class="eyebrow">Prioridades</span><h2>Requiere atención</h2><p>Alertas combinadas de operaciones, logística y agenda.</p></div>
+          <span class="pill ${visibleAlerts.some(a=>a.kind==='danger')?'danger':visibleAlerts.length?'warn':'good'}">${visibleAlerts.length?`${visibleAlerts.length} pendientes`:'Todo estable'}</span>
         </div>
-      </div>
-      <div class="card section-card">
-        <div class="section-head"><div><h2>Próximos 4</h2><p>Reparto recomendado para el siguiente turno.</p></div></div>
-        <div class="recommendation">
-          <h3>Plan sugerido</h3>
-          ${recs.length?recs.map((r,i)=>`<div class="recommendation-item"><span>${i+1}. ${esc(r.territory.name)}</span><b>${esc(r.reason)}</b></div>`).join(''):'<p class="muted">No hay objetivos configurados.</p>'}
+        <div class="dashboard-alert-list">
+          ${visibleAlerts.length?visibleAlerts.map(dashboardAlertHtml).join(''):'<div class="dashboard-empty-compact"><span>✓</span><div><b>No hay urgencias</b><p>El workspace no tiene alertas críticas en este momento.</p></div></div>'}
         </div>
-        <button class="btn primary full" style="margin-top:12px" id="goOperations">Abrir Operations</button>
-      </div>
+      </section>
+
+      <section class="card section-card dashboard-plan">
+        <div class="section-head"><div><span class="eyebrow">Siguiente turno</span><h2>Plan recomendado</h2><p>Distribución sugerida de los próximos graffitis.</p></div></div>
+        <div class="recommendation recommendation-dashboard">
+          ${recs.length?recs.map((r,i)=>`<button class="recommendation-item dashboard-rec" data-dashboard-territory="${r.territory.id}"><span><i>${i+1}</i>${esc(r.territory.name)}</span><b>${esc(r.reason)}</b></button>`).join(''):'<div class="dashboard-empty-small">No hay territorios prioritarios configurados.</div>'}
+        </div>
+        <button class="btn primary full" id="registerTurnDashboard">Registrar próximo turno</button>
+      </section>
+
+      <section class="card section-card dashboard-members-card">
+        <div class="section-head"><div><span class="eyebrow">Organización</span><h2>Integrantes</h2><p>Vista rápida de todos los miembros registrados.</p></div><button class="text-link" data-dashboard-view="members">Gestionar →</button></div>
+        ${(data.members||[]).length?`<div class="member-strip">${data.members.map(m=>`<button class="member-mini" data-member-id="${m.id}">${memberAvatarHtml(m)}<span><b>${esc(m.name)}</b><small>${esc(m.role||'Sin rol')}</small></span><i class="member-status ${m.status==='inactive'?'inactive':''}"></i></button>`).join('')}</div>`:'<button class="dashboard-empty-action" data-dashboard-view="members"><span>＋</span><div><b>Agregar integrantes</b><p>Creá perfiles con nombre, rol y estado.</p></div></button>'}
+      </section>
+
+      <section class="card section-card dashboard-activity-card">
+        <div class="section-head"><div><span class="eyebrow">Workspace</span><h2>Actividad reciente</h2><p>Últimos cambios registrados en todos los módulos.</p></div></div>
+        <div class="timeline-list">
+          ${data.activity.length?data.activity.slice(0,6).map(a=>`<div class="timeline-row"><span class="timeline-dot"></span><div><b>${esc(a.action)}</b><p>${esc(a.target||'FactionOS')}</p></div><time>${fmtRelative(a.date)}</time></div>`).join(''):'<div class="dashboard-empty-compact"><span>↻</span><div><b>Todavía no hay actividad</b><p>Las acciones del equipo aparecerán acá.</p></div></div>'}
+        </div>
+      </section>
     </div>`;
-  $('#goOperations')?.addEventListener('click',()=>navigate('operations'));
+
+  $$('[data-dashboard-view]').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.dashboardView)));
+  $$('.dashboard-module-card').forEach(el=>el.addEventListener('click',()=>navigate(el.dataset.dashboardView)));
+  $$('.dashboard-rec').forEach(el=>el.addEventListener('click',()=>{selectedTerritoryId=el.dataset.dashboardTerritory;selectedMapId=getTerritory(selectedTerritoryId)?.mapId||'city';navigate('operations')}));
+  $$('.dashboard-alert').forEach(el=>el.addEventListener('click',()=>openDashboardTarget(el.dataset.target,el.dataset.id)));
+  $$('.member-mini').forEach(el=>el.addEventListener('click',()=>{navigate('members');setTimeout(()=>openMemberModal(el.dataset.memberId),0)}));
+  $('#editWorkspaceDashboard')?.addEventListener('click',()=>navigate('settings'));
+  $('#openOperationsDashboard')?.addEventListener('click',()=>navigate('operations'));
+  $('#registerTurnDashboard')?.addEventListener('click',openTurnModal);
 }
+function workspaceLogoHtml(className=''){
+  if(data.workspace.logoImage)return `<div class="workspace-logo ${className}"><img src="${esc(data.workspace.logoImage)}" alt="Logo de ${esc(data.workspace.name)}"></div>`;
+  return `<div class="workspace-logo ${className}"><span>${esc((data.workspace.logo||data.workspace.name||'F').slice(0,2).toUpperCase())}</span></div>`;
+}
+function dashboardModuleCard(view,icon,title,value,detail,state='neutral',badge=null){
+  return `<button class="card dashboard-module-card state-${state}" data-dashboard-view="${view}"><span class="module-icon">${icon}</span><div class="module-copy"><small>${title}</small><strong>${esc(value)}</strong><p>${esc(detail)}</p></div>${badge?`<span class="module-badge">${esc(badge)}</span>`:''}<span class="module-arrow">→</span></button>`;
+}
+function dashboardAlertHtml(a){
+  return `<button class="dashboard-alert ${a.kind}" data-target="${a.target}" data-id="${a.id}"><span class="dashboard-alert-icon">${a.icon}</span><span class="dashboard-alert-copy"><b>${esc(a.title)}</b><small>${esc(a.text)}</small></span><span class="dashboard-alert-meta">${esc(a.meta)}<i>→</i></span></button>`;
+}
+function memberAvatarHtml(m){
+  const initials=(m.name||'?').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();
+  if(m.avatar)return `<span class="member-avatar"><img src="${esc(m.avatar)}" alt="${esc(m.name)}"></span>`;
+  return `<span class="member-avatar" style="--member-color:${m.color||data.workspace.color}">${esc(initials||'?')}</span>`;
+}
+function fmtRelative(date){
+  const diff=(Date.now()-new Date(date).getTime())/1000;
+  if(diff<60)return 'Ahora';
+  if(diff<3600)return `Hace ${Math.floor(diff/60)} min`;
+  if(diff<86400)return `Hace ${Math.floor(diff/3600)} h`;
+  if(diff<604800)return `Hace ${Math.floor(diff/86400)} d`;
+  return fmtDate(date);
+}
+function openDashboardTarget(target,id){
+  if(target==='territory'){const t=getTerritory(id);if(t){selectedTerritoryId=id;selectedMapId=t.mapId;navigate('operations')}}
+  if(target==='property'){navigate('logistics');setTimeout(()=>openPropertyDetail(id),0)}
+  if(target==='event')navigate('events');
+}
+
 function stat(label,value,small){return `<div class="card stat-card"><span class="label">${label}</span><strong>${value}</strong><small>${small}</small></div>`}
 function actionRow(name,desc,meta,state){return `<div class="action-row"><span class="action-dot" style="background:var(--${state})"></span><div><strong>${esc(name)}</strong><p>${desc}</p></div><span class="meta">${meta}</span></div>`}
 function timeHuman(h){if(!isFinite(h))return 'Sin vencimiento';if(h<0)return 'Vencido';if(h<1)return `${Math.max(1,Math.round(h*60))} min`;if(h<48)return `${Math.floor(h)} h`;return `${Math.floor(h/24)} d`}
@@ -247,6 +338,60 @@ function renderEvents(){
 }
 function openEventModal(){const local=new Date(Date.now()+36e5);local.setMinutes(local.getMinutes()-local.getTimezoneOffset());openModal('Nuevo evento',`<div class="form-grid"><div class="field"><label>Nombre</label><input id="eName"></div><div class="field"><label>Tipo</label><input id="eType" placeholder="Invasión, corte, reunión..."></div><div class="field"><label>Fecha y hora</label><input id="eDate" type="datetime-local" value="${local.toISOString().slice(0,16)}"></div><div class="field full"><label>Notas</label><textarea id="eNotes"></textarea></div></div>`,()=>{data.events.push({id:uid('event'),name:$('#eName').value.trim()||'Evento',type:$('#eType').value.trim()||'Evento',date:new Date($('#eDate').value).toISOString(),notes:$('#eNotes').value.trim()});logActivity('Evento creado',$('#eName').value);persist('Evento creado');closeModal()})}
 
+function renderMembers(){
+  const root=$('#members');
+  const members=data.members||[];
+  const active=members.filter(m=>(m.status||'active')==='active').length;
+  root.innerHTML=`
+    <div class="section-head">
+      <div><h2>Integrantes</h2><p>Perfiles, roles y estado de los miembros del workspace.</p></div>
+      <button class="btn primary" id="newMember">+ Nuevo integrante</button>
+    </div>
+    <div class="member-summary-grid">
+      <div class="card stat-card"><span class="label">Total</span><strong>${members.length}</strong><small>Integrantes registrados</small></div>
+      <div class="card stat-card"><span class="label">Activos</span><strong>${active}</strong><small>Disponibles actualmente</small></div>
+      <div class="card stat-card"><span class="label">Inactivos</span><strong>${members.length-active}</strong><small>Ausentes o pausados</small></div>
+    </div>
+    ${members.length?`<div class="members-grid">${members.map(memberCardHtml).join('')}</div>`:'<button class="card members-empty" id="emptyNewMember"><span>👥</span><h3>Todavía no hay integrantes</h3><p>Creá el primer perfil para mostrar el equipo en el Dashboard.</p><b>+ Agregar integrante</b></button>'}`;
+  $('#newMember')?.addEventListener('click',()=>openMemberModal());
+  $('#emptyNewMember')?.addEventListener('click',()=>openMemberModal());
+  $$('.member-card').forEach(card=>card.addEventListener('click',()=>openMemberModal(card.dataset.id)));
+}
+function memberCardHtml(m){
+  return `<button class="card member-card" data-id="${m.id}">
+    <div class="member-card-top">${memberAvatarHtml(m)}<span class="member-card-status ${m.status==='inactive'?'inactive':''}">${m.status==='inactive'?'Inactivo':'Activo'}</span></div>
+    <h3>${esc(m.name)}</h3>
+    <p>${esc(m.role||'Sin rol asignado')}</p>
+    ${m.notes?`<small>${esc(m.notes)}</small>`:''}
+    <span class="member-card-arrow">Editar →</span>
+  </button>`;
+}
+function openMemberModal(id=null){
+  const existing=id?(data.members||[]).find(m=>m.id===id):null;
+  const m=existing||{name:'',role:'',status:'active',color:data.workspace.color,notes:'',avatar:''};
+  openModal(existing?'Editar integrante':'Nuevo integrante',`<div class="form-grid">
+    <div class="field"><label>Nombre</label><input id="mName" value="${esc(m.name)}" placeholder="Nombre del integrante"></div>
+    <div class="field"><label>Rol</label><input id="mRole" value="${esc(m.role||'')}" placeholder="Líder, logística, operaciones..."></div>
+    <div class="field"><label>Estado</label><select id="mStatus"><option value="active" ${m.status!=='inactive'?'selected':''}>Activo</option><option value="inactive" ${m.status==='inactive'?'selected':''}>Inactivo</option></select></div>
+    <div class="field"><label>Color del perfil</label><input id="mColor" type="color" value="${m.color||data.workspace.color}"></div>
+    <div class="field full"><label>URL de avatar (opcional)</label><input id="mAvatar" value="${esc(m.avatar||'')}" placeholder="https://..."></div>
+    <div class="field full"><label>Notas</label><textarea id="mNotes" placeholder="Responsabilidades o información útil">${esc(m.notes||'')}</textarea></div>
+  </div>${existing?'<div class="modal-danger-zone"><button class="btn danger" id="deleteMember">Eliminar integrante</button></div>':''}`,()=>{
+    const obj=existing||{id:uid('member')};
+    obj.name=$('#mName').value.trim()||'Integrante';
+    obj.role=$('#mRole').value.trim();
+    obj.status=$('#mStatus').value;
+    obj.color=$('#mColor').value;
+    obj.avatar=$('#mAvatar').value.trim();
+    obj.notes=$('#mNotes').value.trim();
+    if(!existing){data.members=data.members||[];data.members.push(obj)}
+    logActivity(existing?'Integrante actualizado':'Integrante agregado',obj.name);
+    persist('Integrante guardado');
+    closeModal();
+  });
+  $('#deleteMember')?.addEventListener('click',()=>{if(!confirm('¿Eliminar este integrante?'))return;data.members=data.members.filter(x=>x.id!==existing.id);logActivity('Integrante eliminado',existing.name);saveData(data);closeModal();renderMembers();toast('Integrante eliminado')});
+}
+
 function renderBuilder(){
   const root=$('#builder');const types=[['territories','Territorios'],['organizations','Organizaciones'],['properties','Propiedades']];
   const list=builderType==='territories'?data.territories:builderType==='organizations'?data.organizations:data.properties;
@@ -270,14 +415,81 @@ function openTerritoryModal(id,mapId='city'){
 function openOrgModal(){openModal('Nueva organización',`<div class="form-grid"><div class="field"><label>Nombre</label><input id="oName"></div><div class="field"><label>Color</label><input id="oColor" type="color" value="#7a8498"></div><div class="field"><label>Relación</label><select id="oRelation"><option value="neutral">Neutral</option><option value="hostile">Hostil</option><option value="allied">Aliada</option><option value="own">Propia</option></select></div></div>`,()=>{data.organizations.push({id:uid('org'),name:$('#oName').value.trim()||'Organización',color:$('#oColor').value,relation:$('#oRelation').value});persist('Organización creada');closeModal()})}
 
 function renderSettings(){
-  const root=$('#settings');root.innerHTML=`<div class="card form-card"><div class="section-head"><div><h2>Identidad del workspace</h2><p>Todo el branding se puede cambiar sin tocar código.</p></div></div><div class="form-grid"><div class="field"><label>Organización</label><input id="sName" value="${esc(data.workspace.name)}"></div><div class="field"><label>Servidor</label><input id="sServer" value="${esc(data.workspace.server)}"></div><div class="field"><label>Color principal</label><input id="sColor" type="color" value="${data.workspace.color}"></div><div class="field"><label>Inicial / logo textual</label><input id="sLogo" value="${esc(data.workspace.logo||'F')}"></div></div><div class="section-head" style="margin-top:24px"><div><h2>Reglas del servidor</h2><p>Estas reglas alimentan vencimientos y recomendaciones.</p></div></div><div class="form-grid"><div class="field"><label>Duración del graffiti (horas)</label><input id="sDuration" type="number" value="${data.rules.graffitiDurationHours}"></div><div class="field"><label>Graffitis mínimos</label><input id="sRequired" type="number" value="${data.rules.requiredGraffitis}"></div><div class="field"><label>Graffitis por turno</label><input id="sPerTurn" type="number" value="${data.rules.graffitisPerTurn}"></div><div class="field"><label>Horarios (separados por coma)</label><input id="sTurns" value="${data.rules.turns.join(', ')}"></div></div><div class="btn-row" style="margin-top:18px"><button class="btn primary" id="saveSettings">Guardar ajustes</button><button class="btn" id="exportSettings">Exportar workspace</button><button class="btn danger" id="resetSettings">Restablecer demo</button></div></div>`;
-  $('#saveSettings').addEventListener('click',()=>{data.workspace.name=$('#sName').value.trim()||'Organización';data.workspace.server=$('#sServer').value.trim()||'Servidor';data.workspace.color=$('#sColor').value;data.workspace.logo=$('#sLogo').value.trim().slice(0,2)||'F';data.rules.graffitiDurationHours=Math.max(1,Number($('#sDuration').value)||120);data.rules.requiredGraffitis=Math.max(1,Number($('#sRequired').value)||3);data.rules.graffitisPerTurn=Math.max(1,Number($('#sPerTurn').value)||4);data.rules.turns=$('#sTurns').value.split(',').map(x=>x.trim()).filter(x=>/^\d{1,2}:\d{2}$/.test(x));if(!data.rules.turns.length)data.rules.turns=['10:00','22:00'];saveData(data);applyBrand();toast('Ajustes guardados');renderSettings();updateClock()});$('#exportSettings').addEventListener('click',()=>exportData(data));$('#resetSettings').addEventListener('click',()=>{if(confirm('Esto reemplaza los datos locales por la configuración de demostración.')){data=resetData();applyBrand();renderCurrent();toast('Workspace restablecido')}})
+  const root=$('#settings');
+  root.innerHTML=`
+    <div class="settings-layout">
+      <div class="card form-card settings-identity-card">
+        <div class="section-head"><div><span class="eyebrow">Workspace</span><h2>Identidad de la organización</h2><p>Esta información aparece en el Dashboard y en la navegación.</p></div></div>
+        <div class="settings-logo-row">
+          ${workspaceLogoHtml('workspace-logo-settings')}
+          <div>
+            <label class="btn" for="sLogoFile">Subir logo</label>
+            <input id="sLogoFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            ${data.workspace.logoImage?'<button class="btn danger" id="removeWorkspaceLogo">Quitar logo</button>':''}
+            <p class="settings-help">PNG, JPG o WebP. Recomendado: imagen cuadrada.</p>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label>Organización</label><input id="sName" value="${esc(data.workspace.name)}"></div>
+          <div class="field"><label>Servidor</label><input id="sServer" value="${esc(data.workspace.server)}"></div>
+          <div class="field"><label>Estado</label><input id="sStatus" value="${esc(data.workspace.status||'Activa')}" placeholder="Activa, en formación..."></div>
+          <div class="field"><label>Color principal</label><input id="sColor" type="color" value="${data.workspace.color}"></div>
+          <div class="field"><label>Inicial alternativa</label><input id="sLogo" value="${esc(data.workspace.logo||'F')}" maxlength="2"></div>
+          <div class="field full"><label>Descripción breve</label><textarea id="sDescription" maxlength="220" placeholder="Breve descripción de la organización">${esc(data.workspace.description||'')}</textarea><small class="field-hint">Máximo 220 caracteres.</small></div>
+        </div>
+        <div class="btn-row" style="margin-top:18px"><button class="btn primary" id="saveIdentity">Guardar identidad</button><button class="btn" id="previewDashboard">Ver Dashboard</button></div>
+      </div>
+
+      <div class="card form-card">
+        <div class="section-head"><div><span class="eyebrow">Servidor</span><h2>Reglas operativas</h2><p>Estas reglas alimentan los vencimientos y recomendaciones.</p></div></div>
+        <div class="form-grid">
+          <div class="field"><label>Duración del graffiti (horas)</label><input id="sDuration" type="number" value="${data.rules.graffitiDurationHours}"></div>
+          <div class="field"><label>Graffitis mínimos</label><input id="sRequired" type="number" value="${data.rules.requiredGraffitis}"></div>
+          <div class="field"><label>Graffitis por turno</label><input id="sPerTurn" type="number" value="${data.rules.graffitisPerTurn}"></div>
+          <div class="field"><label>Horarios (separados por coma)</label><input id="sTurns" value="${data.rules.turns.join(', ')}"></div>
+        </div>
+        <div class="btn-row" style="margin-top:18px"><button class="btn primary" id="saveRules">Guardar reglas</button></div>
+      </div>
+
+      <div class="card form-card settings-backup-card">
+        <div class="section-head"><div><span class="eyebrow">Datos</span><h2>Respaldo del workspace</h2><p>Exportá todo el contenido o restablecé la configuración de demostración.</p></div></div>
+        <div class="btn-row"><button class="btn" id="exportSettings">Exportar workspace</button><button class="btn danger" id="resetSettings">Restablecer demo</button></div>
+      </div>
+    </div>`;
+
+  $('#saveIdentity').addEventListener('click',()=>{
+    data.workspace.name=$('#sName').value.trim()||'Organización';
+    data.workspace.server=$('#sServer').value.trim()||'Servidor';
+    data.workspace.status=$('#sStatus').value.trim()||'Activa';
+    data.workspace.color=$('#sColor').value;
+    data.workspace.logo=$('#sLogo').value.trim().slice(0,2)||'F';
+    data.workspace.description=$('#sDescription').value.trim().slice(0,220);
+    saveData(data);applyBrand();logActivity('Identidad actualizada',data.workspace.name);toast('Identidad guardada');renderSettings();
+  });
+  $('#saveRules').addEventListener('click',()=>{
+    data.rules.graffitiDurationHours=Math.max(1,Number($('#sDuration').value)||120);
+    data.rules.requiredGraffitis=Math.max(1,Number($('#sRequired').value)||3);
+    data.rules.graffitisPerTurn=Math.max(1,Number($('#sPerTurn').value)||4);
+    data.rules.turns=$('#sTurns').value.split(',').map(x=>x.trim()).filter(x=>/^\d{1,2}:\d{2}$/.test(x));
+    if(!data.rules.turns.length)data.rules.turns=['10:00','22:00'];
+    saveData(data);toast('Reglas guardadas');updateClock();renderSettings();
+  });
+  $('#sLogoFile').addEventListener('change',e=>{
+    const file=e.target.files?.[0];if(!file)return;
+    if(file.size>2.5*1024*1024){toast('El logo debe pesar menos de 2,5 MB');return}
+    const reader=new FileReader();reader.onload=()=>{data.workspace.logoImage=String(reader.result||'');saveData(data);applyBrand();renderSettings();toast('Logo actualizado')};reader.readAsDataURL(file);
+  });
+  $('#removeWorkspaceLogo')?.addEventListener('click',()=>{data.workspace.logoImage='';saveData(data);applyBrand();renderSettings();toast('Logo eliminado')});
+  $('#previewDashboard').addEventListener('click',()=>navigate('dashboard'));
+  $('#exportSettings').addEventListener('click',()=>exportData(data));
+  $('#resetSettings').addEventListener('click',()=>{if(confirm('Esto reemplaza los datos locales por la configuración de demostración.')){data=resetData();applyBrand();renderCurrent();toast('Workspace restablecido')}});
 }
+
 
 function openModal(title,body,onSave,opts={}){const host=$('#modalHost');host.classList.remove('hidden');host.innerHTML=`<div class="modal"><div class="modal-head"><h3>${esc(title)}</h3><button class="icon-btn" id="modalClose">✕</button></div><div class="modal-body">${body}</div><div class="modal-actions">${opts.hideSave?'':'<button class="btn" id="modalCancel">Cancelar</button><button class="btn primary" id="modalSave">Guardar</button>'}</div></div>`;$('#modalClose').addEventListener('click',closeModal);$('#modalCancel')?.addEventListener('click',closeModal);$('#modalSave')?.addEventListener('click',()=>onSave?.())}
 function closeModal(){$('#modalHost').classList.add('hidden');$('#modalHost').innerHTML=''}
 function toast(message){const el=document.createElement('div');el.className='toast';el.textContent=message;$('#toastHost').appendChild(el);setTimeout(()=>el.remove(),2600)}
-function openSearch(){const palette=$('#searchPalette');palette.classList.remove('hidden');palette.innerHTML=`<div class="command-box"><input id="commandInput" placeholder="Buscar territorio, propiedad, organización o evento..." autofocus><div class="command-results" id="commandResults"></div></div>`;const input=$('#commandInput');input.focus();const update=()=>{const q=input.value.toLowerCase().trim();const items=[...data.territories.map(x=>({type:'Territorio',name:x.name,action:()=>{selectedTerritoryId=x.id;selectedMapId=x.mapId;navigate('operations')}})),...data.properties.map(x=>({type:'Propiedad',name:x.name,action:()=>{navigate('logistics');setTimeout(()=>openPropertyDetail(x.id),0)}})),...data.organizations.map(x=>({type:'Organización',name:x.name,action:()=>{builderType='organizations';builderSelectedId=x.id;navigate('builder')}})),...data.events.map(x=>({type:'Evento',name:x.name,action:()=>navigate('events')}))].filter(x=>!q||x.name.toLowerCase().includes(q)).slice(0,12);$('#commandResults').innerHTML=items.length?items.map((x,i)=>`<div class="command-item" data-command="${i}"><b>${esc(x.name)}</b><small>${x.type}</small></div>`).join(''):'<div class="empty-state">Sin resultados</div>';$$('[data-command]').forEach(el=>el.addEventListener('click',()=>{items[Number(el.dataset.command)].action();closeSearch()}))};input.addEventListener('input',update);update()}
+function openSearch(){const palette=$('#searchPalette');palette.classList.remove('hidden');palette.innerHTML=`<div class="command-box"><input id="commandInput" placeholder="Buscar territorio, propiedad, integrante, organización o evento..." autofocus><div class="command-results" id="commandResults"></div></div>`;const input=$('#commandInput');input.focus();const update=()=>{const q=input.value.toLowerCase().trim();const items=[...data.territories.map(x=>({type:'Territorio',name:x.name,action:()=>{selectedTerritoryId=x.id;selectedMapId=x.mapId;navigate('operations')}})),...data.properties.map(x=>({type:'Propiedad',name:x.name,action:()=>{navigate('logistics');setTimeout(()=>openPropertyDetail(x.id),0)}})),...data.organizations.map(x=>({type:'Organización',name:x.name,action:()=>{builderType='organizations';builderSelectedId=x.id;navigate('builder')}})),...data.events.map(x=>({type:'Evento',name:x.name,action:()=>navigate('events')})),...data.members.map(x=>({type:'Integrante',name:x.name,action:()=>{navigate('members');setTimeout(()=>openMemberModal(x.id),0)}}))].filter(x=>!q||x.name.toLowerCase().includes(q)).slice(0,12);$('#commandResults').innerHTML=items.length?items.map((x,i)=>`<div class="command-item" data-command="${i}"><b>${esc(x.name)}</b><small>${x.type}</small></div>`).join(''):'<div class="empty-state">Sin resultados</div>';$$('[data-command]').forEach(el=>el.addEventListener('click',()=>{items[Number(el.dataset.command)].action();closeSearch()}))};input.addEventListener('input',update);update()}
 function closeSearch(){$('#searchPalette').classList.add('hidden');$('#searchPalette').innerHTML=''}
 function getTerritory(id){return data.territories.find(t=>t.id===id)}
 function getOrg(id){return data.organizations.find(o=>o.id===id)||{name:'Sin definir',color:'#788296',relation:'unknown'}}

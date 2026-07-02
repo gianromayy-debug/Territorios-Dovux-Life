@@ -39,6 +39,7 @@ function mergeDefaults(data){
     territories:Array.isArray(data.territories)?data.territories:base.territories,
     properties:Array.isArray(data.properties)?data.properties:[],
     events:Array.isArray(data.events)?data.events:[],
+    members:Array.isArray(data.members)?data.members:base.members,
     activity:Array.isArray(data.activity)?data.activity:[]
   };
 }

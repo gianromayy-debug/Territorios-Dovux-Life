@@ -1,10 +1,13 @@
 export const DEFAULT_DATA = {
-  version: 1,
+  version: 1.1,
   workspace: {
     name: "SixNine",
     server: "Dovux Life RP",
     color: "#e22445",
-    logo: "F"
+    logo: "F",
+    logoImage: "",
+    description: "Centro de operaciones de la organización. Coordinación territorial, logística y agenda en un solo lugar.",
+    status: "Activa"
   },
   rules: {
     graffitiDurationHours: 120,
@@ -43,5 +46,6 @@ export const DEFAULT_DATA = {
   ],
   properties: [],
   events: [],
+  members: [],
   activity: []
 };

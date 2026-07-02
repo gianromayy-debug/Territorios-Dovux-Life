@@ -1,18 +1,18 @@
-# FactionOS v1.0 Preview
+# FactionOS v1.1 — Dashboard general
 
-Primera versión funcional y modular de FactionOS.
+Actualización centrada en convertir el Dashboard en un panorama general de toda la organización.
 
-## Incluye
-- Dashboard operativo.
-- Operations con los mapas reales aportados por el usuario (Los Santos y Norte/Blaine County).
-- Zoom, desplazamiento y pines editables.
-- Ficha de territorio, reputación, prioridades y graffitis con vencimiento automático.
-- Recomendación de los próximos graffitis.
-- Builder de territorios, organizaciones y propiedades.
-- Logistics con propiedades, categorías y objetos configurables.
-- Eventos.
-- Ajustes de organización y reglas.
-- Exportar/importar workspace.
+## Cambios principales
 
-## Publicar en GitHub Pages
-Copiar todo el contenido de esta carpeta a la raíz del repositorio y hacer Commit + Push.
+- Cabecera personalizable con logo, nombre, servidor, estado y descripción.
+- Resumen clicable de Operations, Logistics, Events y Members.
+- Alertas combinadas de territorios, inventario y eventos.
+- Enlaces directos desde el Dashboard al contenido correspondiente.
+- Apartado de integrantes con creación y edición de perfiles.
+- Actividad reciente del workspace.
+- Nueva estética con texturas sutiles y mayor profundidad visual.
+- Ajustes para cargar el logo y editar la descripción de la organización.
+
+## Publicación
+
+Copiá todo el contenido de esta carpeta sobre tu repositorio local, luego hacé Commit y Push desde GitHub Desktop.
