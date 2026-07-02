@@ -2,122 +2,60 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Dovux War Panel</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div>
-      <div class="kicker">DOVUXGAMES · SIXNINE</div>
-      <h1>War Panel</h1>
-    </div>
-    <div class="top-actions">
-      <button id="btnMapLS" class="pill active">Los Santos</button>
-      <button id="btnMapNorth" class="pill">Norte</button>
-      <button id="btnDraw" class="primary">Dibujar</button>
-      <button id="btnFinish" class="warning hidden">Cerrar</button>
-      <button id="btnCancel" class="ghost hidden">Cancelar</button>
-    </div>
-  </header>
-
-  <main class="layout">
-    <section class="map-panel">
-      <div class="hud">
-        <div><span>Próximo turno</span><b id="nextTurn">--:--</b></div>
-        <div><span>Graffitis disponibles</span><b>4</b></div>
-        <div><span>Activos</span><b id="activeSprays">0</b></div>
-        <div><span>Críticos</span><b id="criticalCount">0</b></div>
-      </div>
-      <div class="map-wrap">
-        <svg id="mapSvg" viewBox="0 0 1131 918" aria-label="Mapa táctico"></svg>
-      </div>
-    </section>
-
+  <div class="app">
     <aside class="sidebar">
-      <section class="card commander">
-        <h2>🧠 Comandante</h2>
-        <div id="recommendations" class="recommendations"></div>
-      </section>
-
-      <section class="card" id="editorEmpty">
-        <h2>Territorio</h2>
-        <p class="muted">Tocá un territorio del mapa o dibujá uno nuevo.</p>
-      </section>
-
-      <section class="card hidden" id="editor">
-        <div class="editor-head">
-          <h2 id="selectedTitle">Territorio</h2>
-          <span id="selectedId" class="tag"></span>
-        </div>
-
-        <label>Nombre</label>
-        <input id="nameInput" placeholder="Ej: Davis Norte" />
-
-        <div class="grid2">
-          <div>
-            <label>Controla</label>
-            <select id="gangInput"></select>
-          </div>
-          <div>
-            <label>Prioridad</label>
-            <select id="priorityInput">
-              <option value="mantener">Mantener</option>
-              <option value="conquistar">Conquistar</option>
-              <option value="ignorar">Ignorar</option>
-            </select>
-          </div>
-        </div>
-
-        <label>Reputación SixNine</label>
-        <select id="repInput">
-          <option value="0">Sin reputación</option>
-          <option value="10">Muy baja</option>
-          <option value="25">Baja</option>
-          <option value="50">Media</option>
-          <option value="75">Alta</option>
-          <option value="100">Muy alta</option>
-          <option value="101">Territorio conquistado</option>
-        </select>
-
-        <label>Graffitis activos</label>
-        <div id="spraySlots" class="spray-slots"></div>
-        <div class="button-row">
-          <button id="addSpray" class="primary">+ Agregar ahora</button>
-          <button id="clearSprays" class="ghost">Limpiar</button>
-        </div>
-
-        <label>Notas</label>
-        <textarea id="notesInput" placeholder="Ubicación de graffitis, conflictos, etc."></textarea>
-
-        <div class="button-row">
-          <button id="saveTerritory" class="primary">Guardar</button>
-          <button id="deleteTerritory" class="danger">Eliminar</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>📊 Estado</h2>
-        <div id="summary"></div>
-      </section>
-
-      <section class="card">
-        <h2>🗂️ Datos</h2>
-        <p class="muted">Exportá un backup antes de subir versiones nuevas.</p>
-        <div class="button-row">
-          <button id="exportData" class="ghost">Exportar</button>
-          <button id="importData" class="ghost">Importar</button>
-        </div>
-        <textarea id="dataBox" placeholder="JSON de backup"></textarea>
-      </section>
+      <h1>DOVUX<br><span>WAR PANEL</span></h1>
+      <nav>
+        <button class="active">Panel</button>
+        <button>Territorios</button>
+        <button>Graffitis</button>
+        <button>Estadísticas</button>
+        <button>Configuración</button>
+      </nav>
     </aside>
-  </main>
-
-  <script src="js/config.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/graffitis.js"></script>
-  <script src="js/commander.js"></script>
-  <script src="js/mapa.js"></script>
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">SixNine · Dovux Life</p>
+          <h2>Centro táctico de territorios</h2>
+        </div>
+        <div class="turno">
+          <span>Próximo turno</span>
+          <strong id="nextTurn">--:--</strong>
+          <small id="countdown">calculando...</small>
+        </div>
+      </header>
+      <section class="stats">
+        <article><span>Mantener</span><strong id="statMaintain">0</strong></article>
+        <article><span>Conquistar</span><strong id="statConquer">0</strong></article>
+        <article><span>Ignorar</span><strong id="statIgnore">0</strong></article>
+        <article><span>Graffitis</span><strong id="statGraffiti">0</strong></article>
+      </section>
+      <section class="grid">
+        <div class="map-card">
+          <div class="map-placeholder">
+            <div class="radar"></div>
+            <p>Mapa táctico<br><span>Próxima versión: territorios clicables</span></p>
+          </div>
+        </div>
+        <div class="commander">
+          <h3>🧠 Comandante</h3>
+          <p id="recommendation">Cargando recomendación...</p>
+          <button id="addTest">+ Registrar graffiti de prueba</button>
+        </div>
+      </section>
+      <section>
+        <h3>Territorios</h3>
+        <div id="territoryList" class="territory-list"></div>
+      </section>
+    </main>
+  </div>
+  <script src="js/data.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
