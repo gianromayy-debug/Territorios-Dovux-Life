@@ -1,61 +1,41 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dovux War Panel</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <div class="app">
     <aside class="sidebar">
-      <h1>DOVUX<br><span>WAR PANEL</span></h1>
-      <nav>
-        <button class="active">Panel</button>
-        <button>Territorios</button>
-        <button>Graffitis</button>
-        <button>Estadísticas</button>
-        <button>Configuración</button>
-      </nav>
+      <div class="brand"><span class="dot"></span><div><h1>DOVUX</h1><p>WAR PANEL</p></div></div>
+      <button class="nav active" data-view="dashboard">Dashboard</button>
+      <button class="nav" data-view="territorios">Territorios</button>
+      <button class="nav" data-view="graffitis">Graffitis</button>
+      <button class="nav" data-view="config">Config</button>
+      <div class="clock"><small>Próximo turno</small><strong id="nextShift">--:--</strong><span id="shiftCountdown">--</span></div>
     </aside>
     <main>
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">SixNine · Dovux Life</p>
-          <h2>Centro táctico de territorios</h2>
+      <header class="topbar"><div><h2>Centro de Guerra SixNine</h2><p>Control de territorios, reputación y graffitis</p></div><button id="exportBtn">Exportar datos</button></header>
+      <section id="dashboard" class="view active">
+        <div class="stats">
+          <article><span id="ownedCount">0</span><p>Conquistados</p></article>
+          <article><span id="targetCount">0</span><p>Objetivos</p></article>
+          <article><span id="sprayCount">0</span><p>Graffitis activos</p></article>
+          <article><span id="riskCount">0</span><p>En riesgo</p></article>
         </div>
-        <div class="turno">
-          <span>Próximo turno</span>
-          <strong id="nextTurn">--:--</strong>
-          <small id="countdown">calculando...</small>
-        </div>
-      </header>
-      <section class="stats">
-        <article><span>Mantener</span><strong id="statMaintain">0</strong></article>
-        <article><span>Conquistar</span><strong id="statConquer">0</strong></article>
-        <article><span>Ignorar</span><strong id="statIgnore">0</strong></article>
-        <article><span>Graffitis</span><strong id="statGraffiti">0</strong></article>
-      </section>
-      <section class="grid">
-        <div class="map-card">
-          <div class="map-placeholder">
-            <div class="radar"></div>
-            <p>Mapa táctico<br><span>Próxima versión: territorios clicables</span></p>
-          </div>
-        </div>
-        <div class="commander">
-          <h3>🧠 Comandante</h3>
-          <p id="recommendation">Cargando recomendación...</p>
-          <button id="addTest">+ Registrar graffiti de prueba</button>
+        <div class="layout">
+          <section class="map-card"><div class="tabs"><button class="tab active" data-map="los_santos">Los Santos</button><button class="tab" data-map="norte">Norte</button></div><div class="map-wrap"><img id="mapImg" src="assets/mapas/los_santos.png" alt="Mapa Dovux" /></div></section>
+          <aside class="commander"><h3>IA Comandante</h3><div id="recommendations"></div></aside>
         </div>
       </section>
-      <section>
-        <h3>Territorios</h3>
-        <div id="territoryList" class="territory-list"></div>
-      </section>
+      <section id="territorios" class="view"><div class="section-title"><h2>Territorios</h2><button id="addTerritory">+ Agregar</button></div><div id="territoryGrid" class="grid"></div></section>
+      <section id="graffitis" class="view"><h2>Graffitis activos</h2><div id="graffitiList" class="grid"></div></section>
+      <section id="config" class="view"><h2>Configuración</h2><div class="panel"><button id="resetDemo">Reiniciar demo</button><button id="importBtn">Importar JSON</button><textarea id="importBox" placeholder="Pegá aquí datos exportados"></textarea></div></section>
     </main>
   </div>
-  <script src="js/data.js"></script>
-  <script src="js/app.js"></script>
+  <dialog id="territoryDialog"><form method="dialog"><h3 id="dialogTitle">Territorio</h3><input id="tName" placeholder="Nombre" /><select id="tOwner"></select><select id="tPriority"><option value="mantener">Mantener</option><option value="conquistar">Conquistar</option><option value="ignorar">Ignorar</option></select><select id="tRep"><option value="10">Muy baja</option><option value="25">Baja</option><option value="50">Media</option><option value="75">Alta</option><option value="100">Muy alta</option><option value="101">Conquistado</option></select><input id="tSprays" type="number" min="0" max="3" placeholder="Graffitis" /><menu><button value="cancel">Cancelar</button><button id="saveTerritory" value="default">Guardar</button></menu></form></dialog>
+  <script src="js/data.js"></script><script src="js/app.js"></script>
 </body>
 </html>
