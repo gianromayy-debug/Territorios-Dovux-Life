@@ -1,9 +1,13 @@
-# Territorios Dovux Life - v1.3 Simple + Mapa
+# Dovux War Panel v1.4 - Pines editables
 
-Versión funcional con mapa interactivo, territorios, reputación por niveles, graffitis con vencimiento de 5 días, recomendaciones para los próximos 4 graffitis y exportar/importar datos.
+Versión simple y funcional con mapa interactivo, pines arrastrables, graffitis, reputación y recomendaciones.
 
-## Publicar
-1. Copiar `index.html` y `README.md` dentro de la carpeta local del repo.
-2. Commit: `v1.3 simple map`.
+## Cómo actualizar
+1. Reemplazá el `index.html` del repo por este.
+2. Commit: `v1.4 pines editables`
 3. Push origin.
-4. Abrir el link de GitHub Pages.
+
+## Uso
+- Activá **Mover pines** y arrastrá cada territorio a su lugar real.
+- Las posiciones se guardan automáticamente en el navegador.
+- Usá **Exportar posiciones** para compartir/coordenar ubicaciones.
