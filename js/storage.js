@@ -1,14 +1,44 @@
-function defaultState(){return{version:2,currentMap:'ls',territories:[]}}
-function loadState(){
-  const saved=localStorage.getItem(CONFIG.storageKey); if(saved){try{return JSON.parse(saved)}catch(e){}}
-  const legacy=localStorage.getItem(CONFIG.legacyKey); if(legacy){try{const old=JSON.parse(legacy); return migrateLegacy(old)}catch(e){}}
-  return defaultState();
+import { DEFAULT_DATA } from './data.js';
+const KEY = 'factionos_workspace_v1';
+const clone = (v) => JSON.parse(JSON.stringify(v));
+export function loadData(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return clone(DEFAULT_DATA);
+    const parsed = JSON.parse(raw);
+    return mergeDefaults(parsed);
+  }catch(e){
+    console.warn('No se pudieron cargar los datos', e);
+    return clone(DEFAULT_DATA);
+  }
 }
-function migrateLegacy(old){
-  return {version:2,currentMap:old.currentMap||'ls',territories:(old.territories||[]).map(t=>({
-    id:t.id,map:t.map||'ls',points:t.points||[],name:t.name||'',gang:t.gang||'Neutral',priority:t.priority||'ignorar',rep:Number(t.rep||0),notes:t.notes||'',sprays:Array.from({length:Number(t.graffitis||0)},(_,i)=>({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()+i),placedAt:new Date().toISOString(),by:''}))
-  }))}
+export function saveData(data){ localStorage.setItem(KEY, JSON.stringify(data)); }
+export function resetData(){ localStorage.removeItem(KEY); return clone(DEFAULT_DATA); }
+export function exportData(data){
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `FactionOS-${(data.workspace?.name||'workspace').replace(/\s+/g,'-')}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
-function saveState(){localStorage.setItem(CONFIG.storageKey,JSON.stringify(state));}
-function exportState(){return JSON.stringify(state,null,2)}
-function importState(json){const x=JSON.parse(json); if(!x.territories) throw new Error('JSON inválido'); state=x; saveState(); renderAll();}
+export async function importData(file){
+  const text = await file.text();
+  const parsed = JSON.parse(text);
+  return mergeDefaults(parsed);
+}
+function mergeDefaults(data){
+  const base = clone(DEFAULT_DATA);
+  return {
+    ...base,
+    ...data,
+    workspace:{...base.workspace,...data.workspace},
+    rules:{...base.rules,...data.rules},
+    organizations:Array.isArray(data.organizations)?data.organizations:base.organizations,
+    maps:base.maps,
+    territories:Array.isArray(data.territories)?data.territories:base.territories,
+    properties:Array.isArray(data.properties)?data.properties:[],
+    events:Array.isArray(data.events)?data.events:[],
+    activity:Array.isArray(data.activity)?data.activity:[]
+  };
+}

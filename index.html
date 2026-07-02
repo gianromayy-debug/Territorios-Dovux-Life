@@ -3,49 +3,69 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0c12" />
   <title>FactionOS</title>
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="./css/styles.css" />
 </head>
 <body>
-  <div id="app" class="app">
-    <aside class="sidebar">
-      <div class="brand">
+  <div id="app" class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
         <div class="brand-mark">F</div>
-        <div>
-          <h1>FactionOS</h1>
-          <p id="workspaceName">Workspace</p>
+        <div class="brand-copy">
+          <strong>FactionOS</strong>
+          <span id="workspaceLabel">Workspace</span>
         </div>
+        <button class="icon-btn sidebar-collapse" id="sidebarToggle" aria-label="Contraer menú">☰</button>
       </div>
-      <nav class="nav">
-        <button data-view="dashboard" class="active">🏠 Dashboard</button>
-        <button data-view="operations">🗺 Operations</button>
-        <button data-view="logistics">📦 Logistics</button>
-        <button data-view="events">📅 Events</button>
-        <button data-view="builder">🛠 Builder</button>
-        <button data-view="settings">⚙ Settings</button>
+
+      <div class="workspace-card">
+        <span class="eyebrow">Workspace activo</span>
+        <strong id="sidebarWorkspace">Organización</strong>
+        <small id="sidebarServer">Servidor</small>
+      </div>
+
+      <nav class="nav-list" aria-label="Navegación principal">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span><b>Dashboard</b></button>
+        <div class="nav-section">Operaciones</div>
+        <button class="nav-item" data-view="operations"><span>◎</span><b>Territorios</b></button>
+        <button class="nav-item" data-view="graffiti"><span>◉</span><b>Graffitis</b></button>
+        <div class="nav-section">Logística</div>
+        <button class="nav-item" data-view="logistics"><span>▣</span><b>Propiedades</b></button>
+        <div class="nav-section">Gestión</div>
+        <button class="nav-item" data-view="events"><span>◷</span><b>Eventos</b></button>
+        <button class="nav-item" data-view="builder"><span>⌁</span><b>Builder</b></button>
+        <button class="nav-item" data-view="settings"><span>⚙</span><b>Ajustes</b></button>
       </nav>
-      <div class="side-footer">
-        <span>v1.0 MVP</span>
-        <button id="exportBtn">Exportar</button>
-        <label class="import-label">Importar<input id="importInput" type="file" accept="application/json" hidden></label>
+
+      <div class="sidebar-footer">
+        <span>FactionOS v1.0 Preview</span>
+        <div class="footer-actions">
+          <button id="exportBtn">Exportar</button>
+          <label>Importar<input id="importInput" type="file" accept="application/json" hidden /></label>
+        </div>
       </div>
     </aside>
 
-    <main class="main">
+    <main class="main-area">
       <header class="topbar">
         <div>
-          <p class="muted">Centro de operaciones</p>
-          <h2 id="viewTitle">Dashboard</h2>
+          <span class="eyebrow" id="viewKicker">Centro de operaciones</span>
+          <h1 id="viewTitle">Dashboard</h1>
         </div>
-        <div class="turn-card">
-          <span>Próximo turno</span>
-          <strong id="nextTurn">--:--</strong>
-          <small id="turnCountdown">--</small>
+        <div class="topbar-actions">
+          <button class="search-button" id="globalSearchBtn">⌘ Buscar <kbd>Ctrl K</kbd></button>
+          <div class="turn-card">
+            <span>Próximo turno</span>
+            <strong id="nextTurn">--:--</strong>
+            <small id="turnCountdown">--</small>
+          </div>
         </div>
       </header>
 
       <section id="dashboard" class="view active"></section>
       <section id="operations" class="view"></section>
+      <section id="graffiti" class="view"></section>
       <section id="logistics" class="view"></section>
       <section id="events" class="view"></section>
       <section id="builder" class="view"></section>
@@ -53,7 +73,10 @@
     </main>
   </div>
 
-  <div id="modal" class="modal hidden"></div>
-  <script type="module" src="js/app.js"></script>
+  <div id="toastHost" class="toast-host" aria-live="polite"></div>
+  <div id="modalHost" class="modal-host hidden"></div>
+  <div id="searchPalette" class="command-palette hidden"></div>
+
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>

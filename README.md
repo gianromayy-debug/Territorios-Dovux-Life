@@ -1,15 +1,18 @@
-# FactionOS v1.0 MVP
+# FactionOS v1.0 Preview
 
-Plataforma configurable para organizaciones de roleplay.
+Primera versión funcional y modular de FactionOS.
 
 ## Incluye
-- Dashboard operativo
-- Operations: territorios, graffitis, prioridades y recomendaciones
-- Logistics: propiedades e inventario por propiedad
-- Events: agenda básica
-- Builder: organizaciones y accesos de configuración
-- Settings: reglas del servidor, turnos, colores y workspace
-- Exportar/Importar workspace JSON
+- Dashboard operativo.
+- Operations con los mapas reales aportados por el usuario (Los Santos y Norte/Blaine County).
+- Zoom, desplazamiento y pines editables.
+- Ficha de territorio, reputación, prioridades y graffitis con vencimiento automático.
+- Recomendación de los próximos graffitis.
+- Builder de territorios, organizaciones y propiedades.
+- Logistics con propiedades, categorías y objetos configurables.
+- Eventos.
+- Ajustes de organización y reglas.
+- Exportar/importar workspace.
 
-## Publicación en GitHub Pages
-Subir todo el contenido de esta carpeta al repositorio y hacer Commit + Push.
+## Publicar en GitHub Pages
+Copiar todo el contenido de esta carpeta a la raíz del repositorio y hacer Commit + Push.

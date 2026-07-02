@@ -1,50 +1,286 @@
-const STORAGE_KEY = 'factionos_v1_workspace';
-const defaultState = {
-  settings:{workspace:'SixNine',server:'DovuxGames',accent:'#d92332',turns:['10:00','22:00'],graffitiDurationHours:120,graffitisPerTurn:4,minGraffitis:3},
-  organizations:[{id:id(),name:'SixNine',color:'#ff4d5e',relation:'propia'},{id:id(),name:'Heat Gang',color:'#8b5a2b',relation:'hostil'},{id:id(),name:'Young Yakuza',color:'#b89cff',relation:'neutral'}],
-  territories:[
-    terr('Davis Norte','SixNine','mantener','conquistado',26,62),terr('Terminal','SixNine','mantener','conquistado',54,78),terr('Merryweather','SixNine','mantener','conquistado',70,80),terr('Sandy Sur','SixNine','mantener','conquistado',66,28),terr('Forum Drive','Heat Gang','conquistar','alta',31,68)
-  ],
-  properties:[],events:[],activity:[]
+import { loadData, saveData, exportData, importData, resetData } from './storage.js';
+import { uid, esc, fmtDate, reputationLabel, reputationPercent, hoursUntil, activeGraffitis, getNextTurn, countdownText, territoryState, recommendation } from './utils.js';
+
+let data=loadData();
+let currentView='dashboard';
+let selectedTerritoryId=data.territories[0]?.id||null;
+let selectedMapId='city';
+let movingPins=false;
+let mapZoom=.78;
+let mapPan={x:0,y:0};
+let dragState=null;
+let builderType='territories';
+let builderSelectedId=null;
+
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const views={
+  dashboard:{title:'Dashboard',kicker:'Centro de operaciones'},
+  operations:{title:'Operations',kicker:'Mapa táctico y territorios'},
+  graffiti:{title:'Graffitis',kicker:'Vencimientos y turnos'},
+  logistics:{title:'Logistics',kicker:'Propiedades e inventarios'},
+  events:{title:'Events',kicker:'Agenda de la organización'},
+  builder:{title:'Builder',kicker:'Configuración visual del workspace'},
+  settings:{title:'Settings',kicker:'Reglas, identidad y respaldos'}
 };
-function id(){return Math.random().toString(36).slice(2,10)}
-function terr(name,owner,priority,rep,x,y){return {id:id(),name,owner,priority,reputation:rep,x,y,notes:'',graffitis:[]}}
-let state = load();
-let currentView='dashboard', selectedTerritory=null, moveMode=false;
-const $ = s => document.querySelector(s);
-const views = {dashboard:$('#dashboard'),operations:$('#operations'),logistics:$('#logistics'),events:$('#events'),builder:$('#builder'),settings:$('#settings')};
-function load(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||defaultState}catch{return defaultState}}
-function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));render()}
-function activeGraffitis(t){const now=Date.now();return (t.graffitis||[]).filter(g=>new Date(g.at).getTime()+state.settings.graffitiDurationHours*3600000>now)}
-function nextExpiry(t){const active=activeGraffitis(t); if(!active.length)return null; return new Date(Math.min(...active.map(g=>new Date(g.at).getTime()+state.settings.graffitiDurationHours*3600000)))}
-function status(t){const n=activeGraffitis(t).length;if(t.priority==='ignorar')return 'ignore'; if(n>=3)return 'safe'; if(n===2)return 'attention'; return 'risk'}
-function repLabel(r){return ({muy_baja:'Muy baja',baja:'Baja',media:'Media',alta:'Alta',muy_alta:'Muy alta',conquistado:'Conquistado'}[r]||r||'Sin datos')}
-function fmt(d){return d?new Intl.DateTimeFormat('es-AR',{dateStyle:'short',timeStyle:'short'}).format(d):'Sin vencimiento'}
-function countdown(ms){if(ms<=0)return 'ahora'; const h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000); return `${h}h ${m}m`}
-function nextTurn(){const now=new Date(); const turns=state.settings.turns||['10:00','22:00']; const candidates=turns.map(t=>{const [h,m]=t.split(':').map(Number);const d=new Date(now);d.setHours(h,m,0,0); if(d<=now)d.setDate(d.getDate()+1); return {label:t,date:d}}).sort((a,b)=>a.date-b.date); return candidates[0]}
-function recommend(){let slots=state.settings.graffitisPerTurn; const rec=[]; const targets=[...state.territories].filter(t=>t.priority!=='ignorar').sort((a,b)=>{
- const order={mantener:0,conquistar:1,baja:2}; const sa=status(a),sb=status(b); const risk={risk:0,attention:1,safe:2,ignore:3}; return (risk[sa]-risk[sb])||(order[a.priority]-order[b.priority])||(activeGraffitis(a).length-activeGraffitis(b).length);
-});
-for(const t of targets){while(slots>0 && activeGraffitis(t).length + rec.filter(r=>r.id===t.id).length < state.settings.minGraffitis){rec.push({id:t.id,name:t.name});slots--}}
-return rec.slice(0,state.settings.graffitisPerTurn);
+
+function init(){
+  bindGlobal();
+  applyBrand();
+  navigate('dashboard');
+  updateClock();
+  setInterval(updateClock,30000);
 }
-function renderShell(){ $('#workspaceName').textContent=state.settings.workspace; document.documentElement.style.setProperty('--accent',state.settings.accent||'#d92332'); const nt=nextTurn(); $('#nextTurn').textContent=nt.label; $('#turnCountdown').textContent=countdown(nt.date-Date.now()); }
-function setView(v){currentView=v;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));Object.entries(views).forEach(([k,el])=>el.classList.toggle('active',k===v));$('#viewTitle').textContent={dashboard:'Dashboard',operations:'Operations',logistics:'Logistics',events:'Events',builder:'Builder',settings:'Settings'}[v];render()}
-document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
-function render(){renderShell(); renderDashboard(); renderOperations(); renderLogistics(); renderEvents(); renderBuilder(); renderSettings();}
-function renderDashboard(){const terrs=state.territories.filter(t=>t.priority!=='ignorar');const risks=terrs.filter(t=>status(t)==='risk');const att=terrs.filter(t=>status(t)==='attention');const rec=recommend();views.dashboard.innerHTML=`<div class="grid cols-4"><div class="card"><p class="muted">Territorios</p><div class="stat">${terrs.length}</div><span class="pill">activos</span></div><div class="card"><p class="muted">Riesgo</p><div class="stat bad">${risks.length}</div><span class="pill">requieren atención</span></div><div class="card"><p class="muted">Atención</p><div class="stat warn">${att.length}</div><span class="pill">faltan graffitis</span></div><div class="card"><p class="muted">Graffitis</p><div class="stat">${state.territories.reduce((a,t)=>a+activeGraffitis(t).length,0)}</div><span class="pill">activos</span></div></div><div class="grid cols-2" style="margin-top:14px"><div class="card"><h3>Prioridad operativa</h3><div class="list">${[...risks,...att].slice(0,6).map(t=>`<div class="row"><span>${t.name}<br><small class="small">${t.priority} · ${activeGraffitis(t).length}/3 graffitis</small></span><b class="${status(t)==='risk'?'bad':'warn'}">${status(t)==='risk'?'Riesgo':'Atención'}</b></div>`).join('')||'<p class="muted">Sin alertas críticas.</p>'}</div></div><div class="card"><h3>Recomendación próximos 4</h3><div class="list">${rec.map((r,i)=>`<div class="row"><span>${i+1}. ${r.name}</span><b>🎨</b></div>`).join('')||'<p class="muted">No hay recomendaciones pendientes.</p>'}</div></div></div>`}
-function renderOperations(){views.operations.innerHTML=`<div class="toolbar"><button class="primary" id="addTerritory">+ Territorio</button><button class="ghost" id="toggleMove">${moveMode?'Salir de mover':'Mover pines'}</button><button class="ghost" id="quickGraffiti">Registrar turno</button></div><div class="map-layout"><div class="map" id="map"></div><aside class="card" id="territoryPanel"></aside></div>`; $('#addTerritory').onclick=()=>territoryModal(); $('#toggleMove').onclick=()=>{moveMode=!moveMode;renderOperations()}; $('#quickGraffiti').onclick=quickTurnModal; const map=$('#map'); state.territories.forEach(t=>{const p=document.createElement('button');p.className=`pin ${selectedTerritory===t.id?'focus':''} ${status(t)==='risk'?'risk':''}`;p.style.left=t.x+'%';p.style.top=t.y+'%';p.style.borderColor=(state.organizations.find(o=>o.name===t.owner)||{}).color||'#fff';p.textContent=t.name;p.onclick=(e)=>{e.stopPropagation(); selectedTerritory=t.id; renderOperations()};map.appendChild(p)}); map.onclick=e=>{if(moveMode&&selectedTerritory){const rect=map.getBoundingClientRect();const t=state.territories.find(x=>x.id===selectedTerritory);t.x=((e.clientX-rect.left)/rect.width*100).toFixed(2);t.y=((e.clientY-rect.top)/rect.height*100).toFixed(2);save()}}; renderTerritoryPanel();}
-function renderTerritoryPanel(){const panel=$('#territoryPanel'); const t=state.territories.find(x=>x.id===selectedTerritory)||state.territories[0]; if(!t){panel.innerHTML='<h3>Sin territorios</h3><p class="muted">Creá uno desde Builder u Operations.</p>';return} selectedTerritory=t.id; const n=activeGraffitis(t).length; const exp=nextExpiry(t); panel.innerHTML=`<span class="pill">${t.priority}</span><h3 style="font-size:26px">${t.name}</h3><p class="muted">Controla: <b>${t.owner||'Sin asignar'}</b></p><p>Reputación: <b>${repLabel(t.reputation)}</b></p><div class="sprays">${'🎨'.repeat(n)}${'⚪'.repeat(Math.max(0,3-n))}</div><p class="muted">Próximo vencimiento: ${fmt(exp)}</p><p class="muted">${exp?'Falta '+countdown(exp-Date.now()):'Sin graffitis activos'}</p><div class="grid"><button class="primary" id="addGraf">+ Agregar graffiti</button><button class="ghost" id="editTerr">Editar</button><button class="danger" id="clearGraf">Limpiar graffitis</button></div><h3>Graffitis</h3><div class="list">${activeGraffitis(t).map((g,i)=>`<div class="row"><span>#${i+1}<br><small class="small">${fmt(new Date(g.at))}</small></span><button class="ghost" data-delg="${g.id}">Eliminar</button></div>`).join('')||'<p class="muted">Sin graffitis activos.</p>'}</div>`; $('#addGraf').onclick=()=>{t.graffitis=t.graffitis||[];t.graffitis.push({id:id(),at:new Date().toISOString()});state.activity.unshift({at:new Date().toISOString(),text:`Graffiti agregado en ${t.name}`});save()}; $('#editTerr').onclick=()=>territoryModal(t); $('#clearGraf').onclick=()=>{t.graffitis=[];save()}; panel.querySelectorAll('[data-delg]').forEach(b=>b.onclick=()=>{t.graffitis=t.graffitis.filter(g=>g.id!==b.dataset.delg);save()})}
-function renderLogistics(){views.logistics.innerHTML=`<div class="toolbar"><button class="primary" id="newProp">+ Nueva propiedad</button></div><div class="grid cols-3">${state.properties.map(p=>`<div class="card"><h3>${p.icon||'🏠'} ${p.name}</h3><p class="muted">${p.type||'Propiedad'}</p><div class="list">${(p.items||[]).slice(0,6).map(it=>`<div class="row"><span>${it.name}<br><small class="small">${it.category||'General'}</small></span><b>${it.qty} ${it.unit||''}</b></div>`).join('')||'<p class="muted">Sin objetos.</p>'}</div><button class="ghost" data-prop="${p.id}">Administrar</button></div>`).join('')||'<div class="card"><h3>Sin propiedades</h3><p class="muted">Creá casas, depósitos o galpones desde acá.</p></div>'}</div>`; $('#newProp').onclick=()=>propertyModal(); views.logistics.querySelectorAll('[data-prop]').forEach(b=>b.onclick=()=>propertyModal(state.properties.find(p=>p.id===b.dataset.prop)))}
-function renderEvents(){views.events.innerHTML=`<div class="toolbar"><button class="primary" id="newEvent">+ Nuevo evento</button></div><div class="card"><h3>Agenda</h3><div class="list">${state.events.map(ev=>`<div class="row"><span>${ev.name}<br><small class="small">${ev.type||'Evento'} · ${ev.time||''}</small></span><button class="ghost" data-event="${ev.id}">Editar</button></div>`).join('')||'<p class="muted">Sin eventos cargados.</p>'}</div></div>`; $('#newEvent').onclick=()=>eventModal(); views.events.querySelectorAll('[data-event]').forEach(b=>b.onclick=()=>eventModal(state.events.find(e=>e.id===b.dataset.event)))}
-function renderBuilder(){views.builder.innerHTML=`<div class="tabs"><button class="tab active">Constructor</button></div><div class="grid cols-3"><div class="card"><h3>Organizaciones</h3><p class="muted">Bandas/facciones externas.</p><button class="primary" id="newOrg">+ Organización</button><div class="list">${state.organizations.map(o=>`<div class="row"><span style="color:${o.color}">${o.name}</span><button class="ghost" data-org="${o.id}">Editar</button></div>`).join('')}</div></div><div class="card"><h3>Territorios</h3><p class="muted">Mapa, reputación y prioridades.</p><button class="primary" onclick="document.querySelector('[data-view=operations]').click()">Abrir Operations</button></div><div class="card"><h3>Logística</h3><p class="muted">Casas, categorías y objetos.</p><button class="primary" onclick="document.querySelector('[data-view=logistics]').click()">Abrir Logistics</button></div></div>`; $('#newOrg').onclick=()=>orgModal(); views.builder.querySelectorAll('[data-org]').forEach(b=>b.onclick=()=>orgModal(state.organizations.find(o=>o.id===b.dataset.org)))}
-function renderSettings(){views.settings.innerHTML=`<div class="card"><h3>Workspace</h3><div class="form-grid"><label>Nombre<input id="setWorkspace" value="${state.settings.workspace}"></label><label>Servidor<input id="setServer" value="${state.settings.server}"></label><label>Color principal<input id="setAccent" type="color" value="${state.settings.accent}"></label><label>Turnos<input id="setTurns" value="${state.settings.turns.join(',')}"></label><label>Duración graffiti (horas)<input id="setDur" type="number" value="${state.settings.graffitiDurationHours}"></label><label>Graffitis por turno<input id="setPer" type="number" value="${state.settings.graffitisPerTurn}"></label></div><button class="primary" id="saveSettings">Guardar configuración</button></div>`; $('#saveSettings').onclick=()=>{state.settings.workspace=$('#setWorkspace').value;state.settings.server=$('#setServer').value;state.settings.accent=$('#setAccent').value;state.settings.turns=$('#setTurns').value.split(',').map(x=>x.trim()).filter(Boolean);state.settings.graffitiDurationHours=Number($('#setDur').value);state.settings.graffitisPerTurn=Number($('#setPer').value);save()}}
-function openModal(html){$('#modal').innerHTML=`<div class="modal-box">${html}</div>`;$('#modal').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden')}
-function territoryModal(t={}){openModal(`<h3>${t.id?'Editar':'Nuevo'} territorio</h3><div class="form-grid"><label>Nombre<input id="tName" value="${t.name||''}"></label><label>Controla<select id="tOwner">${state.organizations.map(o=>`<option ${t.owner===o.name?'selected':''}>${o.name}</option>`).join('')}</select></label><label>Prioridad<select id="tPriority">${['mantener','conquistar','ignorar','baja'].map(p=>`<option ${t.priority===p?'selected':''}>${p}</option>`).join('')}</select></label><label>Reputación<select id="tRep">${['muy_baja','baja','media','alta','muy_alta','conquistado'].map(r=>`<option ${t.reputation===r?'selected':''} value="${r}">${repLabel(r)}</option>`).join('')}</select></label></div><label>Notas<textarea id="tNotes">${t.notes||''}</textarea></label><div class="actions"><button class="ghost" id="cancel">Cancelar</button><button class="primary" id="saveT">Guardar</button></div>`);$('#cancel').onclick=closeModal;$('#saveT').onclick=()=>{if(t.id){Object.assign(t,{name:$('#tName').value,owner:$('#tOwner').value,priority:$('#tPriority').value,reputation:$('#tRep').value,notes:$('#tNotes').value})}else state.territories.push({id:id(),name:$('#tName').value,owner:$('#tOwner').value,priority:$('#tPriority').value,reputation:$('#tRep').value,notes:$('#tNotes').value,x:50,y:50,graffitis:[]});closeModal();save()}}
-function orgModal(o={}){openModal(`<h3>${o.id?'Editar':'Nueva'} organización</h3><div class="form-grid"><label>Nombre<input id="oName" value="${o.name||''}"></label><label>Color<input id="oColor" type="color" value="${o.color||'#ffffff'}"></label><label>Relación<select id="oRel">${['propia','aliada','neutral','hostil','guerra'].map(r=>`<option ${o.relation===r?'selected':''}>${r}</option>`).join('')}</select></label></div><div class="actions"><button class="ghost" id="cancel">Cancelar</button><button class="primary" id="saveO">Guardar</button></div>`);$('#cancel').onclick=closeModal;$('#saveO').onclick=()=>{if(o.id)Object.assign(o,{name:$('#oName').value,color:$('#oColor').value,relation:$('#oRel').value});else state.organizations.push({id:id(),name:$('#oName').value,color:$('#oColor').value,relation:$('#oRel').value});closeModal();save()}}
-function propertyModal(p={}){openModal(`<h3>${p.id?'Administrar':'Nueva'} propiedad</h3><div class="form-grid"><label>Nombre<input id="pName" value="${p.name||''}"></label><label>Tipo<input id="pType" value="${p.type||'Casa'}"></label><label>Icono<input id="pIcon" value="${p.icon||'🏠'}"></label></div>${p.id?`<h3>Objetos</h3><div class="list">${(p.items||[]).map(it=>`<div class="row"><span>${it.name}<br><small class="small">${it.category||'General'}</small></span><b>${it.qty}</b></div>`).join('')||'<p class="muted">Sin objetos.</p>'}</div><div class="form-grid"><label>Objeto<input id="iName"></label><label>Categoría<input id="iCat"></label><label>Cantidad<input id="iQty" type="number" value="0"></label><label>Unidad<input id="iUnit" value="u"></label></div><button class="ghost" id="addItem">+ Agregar objeto</button>`:''}<div class="actions"><button class="ghost" id="cancel">Cerrar</button><button class="primary" id="saveP">Guardar</button></div>`);$('#cancel').onclick=closeModal;if(p.id&&$('#addItem'))$('#addItem').onclick=()=>{p.items=p.items||[];p.items.push({id:id(),name:$('#iName').value,category:$('#iCat').value,qty:Number($('#iQty').value),unit:$('#iUnit').value});closeModal();save()};$('#saveP').onclick=()=>{if(p.id)Object.assign(p,{name:$('#pName').value,type:$('#pType').value,icon:$('#pIcon').value});else state.properties.push({id:id(),name:$('#pName').value,type:$('#pType').value,icon:$('#pIcon').value,items:[]});closeModal();save()}}
-function eventModal(ev={}){openModal(`<h3>${ev.id?'Editar':'Nuevo'} evento</h3><div class="form-grid"><label>Nombre<input id="eName" value="${ev.name||''}"></label><label>Tipo<input id="eType" value="${ev.type||''}"></label><label>Horario<input id="eTime" value="${ev.time||''}"></label><label>Repetición<input id="eRep" value="${ev.repeat||''}"></label></div><div class="actions"><button class="ghost" id="cancel">Cancelar</button><button class="primary" id="saveE">Guardar</button></div>`);$('#cancel').onclick=closeModal;$('#saveE').onclick=()=>{if(ev.id)Object.assign(ev,{name:$('#eName').value,type:$('#eType').value,time:$('#eTime').value,repeat:$('#eRep').value});else state.events.push({id:id(),name:$('#eName').value,type:$('#eType').value,time:$('#eTime').value,repeat:$('#eRep').value});closeModal();save()}}
-function quickTurnModal(){const rec=recommend();openModal(`<h3>Registrar turno</h3><p class="muted">Recomendación automática según riesgos y prioridades.</p><div class="list">${rec.map(r=>`<div class="row"><span>${r.name}</span><b>🎨</b></div>`).join('')||'Sin recomendaciones.'}</div><div class="actions"><button class="ghost" id="cancel">Cancelar</button><button class="primary" id="applyRec">Aplicar recomendación</button></div>`);$('#cancel').onclick=closeModal;$('#applyRec').onclick=()=>{rec.forEach(r=>{const t=state.territories.find(x=>x.id===r.id);t.graffitis.push({id:id(),at:new Date().toISOString()})});closeModal();save()}}
-$('#exportBtn').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`factionos-${state.settings.workspace}.json`;a.click()};
-$('#importInput').onchange=e=>{const f=e.target.files[0]; if(!f)return; const r=new FileReader();r.onload=()=>{state=JSON.parse(r.result);save()};r.readAsText(f)};
-setInterval(renderShell,1000);render();
+function bindGlobal(){
+  $$('.nav-item').forEach(b=>b.addEventListener('click',()=>navigate(b.dataset.view)));
+  $('#sidebarToggle').addEventListener('click',()=>$('#sidebar').classList.toggle('collapsed'));
+  $('#exportBtn').addEventListener('click',()=>exportData(data));
+  $('#importInput').addEventListener('change',async e=>{
+    if(!e.target.files[0])return;
+    try{data=await importData(e.target.files[0]);persist('Workspace importado');applyBrand();renderCurrent();}
+    catch(err){toast('El archivo no es válido');}
+    e.target.value='';
+  });
+  $('#globalSearchBtn').addEventListener('click',openSearch);
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSearch();}
+    if(e.key==='Escape'){closeModal();closeSearch();}
+  });
+  $('#modalHost').addEventListener('click',e=>{if(e.target.id==='modalHost')closeModal();});
+  $('#searchPalette').addEventListener('click',e=>{if(e.target.id==='searchPalette')closeSearch();});
+}
+function applyBrand(){
+  document.documentElement.style.setProperty('--accent',data.workspace.color||'#e22445');
+  document.documentElement.style.setProperty('--accent-2',data.workspace.color||'#ff4a67');
+  $('#workspaceLabel').textContent=data.workspace.name;
+  $('#sidebarWorkspace').textContent=data.workspace.name;
+  $('#sidebarServer').textContent=data.workspace.server;
+  $('.brand-mark').textContent=(data.workspace.logo||data.workspace.name||'F').slice(0,1).toUpperCase();
+}
+function persist(message){saveData(data);if(message)toast(message);renderCurrent();}
+function navigate(view){
+  currentView=view;
+  $$('.view').forEach(v=>v.classList.remove('active'));
+  $(`#${view}`).classList.add('active');
+  $$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  $('#viewTitle').textContent=views[view].title;
+  $('#viewKicker').textContent=views[view].kicker;
+  renderCurrent();
+}
+function renderCurrent(){
+  ({dashboard:renderDashboard,operations:renderOperations,graffiti:renderGraffiti,logistics:renderLogistics,events:renderEvents,builder:renderBuilder,settings:renderSettings}[currentView])();
+}
+function updateClock(){
+  const n=getNextTurn(data.rules.turns);
+  $('#nextTurn').textContent=n.time;
+  $('#turnCountdown').textContent=countdownText(n.date);
+  if(currentView==='dashboard')renderDashboard();
+}
+function renderDashboard(){
+  const root=$('#dashboard');
+  const states=data.territories.map(t=>territoryState(t,data.rules));
+  const active=data.territories.reduce((n,t)=>n+activeGraffitis(t).length,0);
+  const risk=states.filter(s=>s.key==='risk').length;
+  const safe=states.filter(s=>s.key==='safe').length;
+  const recs=recommendation(data);
+  const expiry=data.territories.flatMap(t=>activeGraffitis(t).map(g=>({t,g,h:hoursUntil(g.expiresAt)}))).sort((a,b)=>a.h-b.h).slice(0,6);
+  root.innerHTML=`
+    <div class="page-grid stats-grid">
+      ${stat('Territorios seguros',safe,'Con 3 graffitis o más')}
+      ${stat('Requieren atención',risk,'Prioridad operativa')}
+      ${stat('Graffitis activos',active,'En todos los territorios')}
+      ${stat('Propiedades',data.properties.length,'Depósitos configurados')}
+    </div>
+    <div class="dashboard-layout">
+      <div class="card section-card">
+        <div class="section-head"><div><h2>Centro de operaciones</h2><p>Lo que requiere atención ahora.</p></div><span class="pill ${risk?'danger':'good'}">${risk?`${risk} alertas`:'Todo estable'}</span></div>
+        <div class="action-list">
+          ${expiry.length?expiry.map(x=>actionRow(x.t.name,x.h<=12?'Vence pronto':'Vencimiento programado',timeHuman(x.h),x.h<=12?'danger':x.h<=24?'warn':'info')).join(''):'<div class="empty-state">Todavía no hay graffitis activos.</div>'}
+        </div>
+      </div>
+      <div class="card section-card">
+        <div class="section-head"><div><h2>Próximos 4</h2><p>Reparto recomendado para el siguiente turno.</p></div></div>
+        <div class="recommendation">
+          <h3>Plan sugerido</h3>
+          ${recs.length?recs.map((r,i)=>`<div class="recommendation-item"><span>${i+1}. ${esc(r.territory.name)}</span><b>${esc(r.reason)}</b></div>`).join(''):'<p class="muted">No hay objetivos configurados.</p>'}
+        </div>
+        <button class="btn primary full" style="margin-top:12px" id="goOperations">Abrir Operations</button>
+      </div>
+    </div>`;
+  $('#goOperations')?.addEventListener('click',()=>navigate('operations'));
+}
+function stat(label,value,small){return `<div class="card stat-card"><span class="label">${label}</span><strong>${value}</strong><small>${small}</small></div>`}
+function actionRow(name,desc,meta,state){return `<div class="action-row"><span class="action-dot" style="background:var(--${state})"></span><div><strong>${esc(name)}</strong><p>${desc}</p></div><span class="meta">${meta}</span></div>`}
+function timeHuman(h){if(!isFinite(h))return 'Sin vencimiento';if(h<0)return 'Vencido';if(h<1)return `${Math.max(1,Math.round(h*60))} min`;if(h<48)return `${Math.floor(h)} h`;return `${Math.floor(h/24)} d`}
+
+function renderOperations(){
+  const root=$('#operations');
+  const map=data.maps.find(m=>m.id===selectedMapId)||data.maps[0];
+  const territories=data.territories.filter(t=>t.mapId===selectedMapId);
+  const selected=data.territories.find(t=>t.id===selectedTerritoryId);
+  root.innerHTML=`<div class="operations-shell">
+    <div class="map-card">
+      <div class="map-toolbar">
+        <div class="tool-group">
+          ${data.maps.map(m=>`<button class="tool-btn map-tab ${m.id===selectedMapId?'active':''}" data-map="${m.id}">${esc(m.name)}</button>`).join('')}
+        </div>
+        <div class="tool-group">
+          <button class="tool-btn" id="zoomOut">−</button><button class="tool-btn" id="zoomReset">100%</button><button class="tool-btn" id="zoomIn">+</button>
+          <button class="tool-btn ${movingPins?'active':''}" id="movePins">${movingPins?'Guardar posiciones':'Mover pines'}</button>
+          <button class="tool-btn primary" id="newTerritory">+ Territorio</button>
+        </div>
+      </div>
+      <div class="map-viewport" id="mapViewport">
+        <div class="map-stage ${selectedMapId==='north'?'north':''}" id="mapStage">
+          <img class="map-image" src="${map.src}" width="${map.width}" height="${map.height}" alt="${esc(map.name)}" draggable="false" />
+          ${territories.map(t=>territoryPin(t)).join('')}
+        </div>
+        <div class="map-vignette"></div>
+        <div class="map-legend">
+          <h4>Prioridad</h4>
+          <div class="legend-row"><span class="legend-color" style="background:#ff5d67"></span>Mantener<input type="checkbox" data-filter="maintain" checked></div>
+          <div class="legend-row"><span class="legend-color" style="background:#51a8ff"></span>Conquistar<input type="checkbox" data-filter="conquer" checked></div>
+          <div class="legend-row"><span class="legend-color" style="background:#6b7488"></span>Ignorar<input type="checkbox" data-filter="ignore" checked></div>
+        </div>
+        <div class="map-help"><span>Rueda: zoom</span><span>Arrastrar: mover mapa</span><span>Clic: abrir ficha</span></div>
+      </div>
+    </div>
+    <aside class="card detail-panel" id="territoryDetail">${selected?territoryDetail(selected):'<div class="detail-empty"><div><h3>Seleccioná un territorio</h3><p>Hacé clic en una etiqueta del mapa para ver sus datos.</p></div></div>'}</aside>
+  </div>`;
+  bindOperations();
+  updateMapTransform();
+}
+function territoryPin(t){
+  const org=getOrg(t.ownerId);const state=territoryState(t,data.rules);const active=activeGraffitis(t).length;
+  const color=t.priority==='maintain'?'#ff5d67':t.priority==='conquer'?'#51a8ff':org.color;
+  return `<button class="territory-pin ${selectedTerritoryId===t.id?'selected':''} ${state.key==='risk'?'risk':''}" data-territory="${t.id}" style="left:${t.x}%;top:${t.y}%;--pin-color:${color}"><span class="pin-count">${active}</span><span class="pin-label">${esc(t.name)}</span></button>`;
+}
+function territoryDetail(t){
+  const org=getOrg(t.ownerId),active=activeGraffitis(t),state=territoryState(t,data.rules);
+  const next=active.length?active.slice().sort((a,b)=>new Date(a.expiresAt)-new Date(b.expiresAt))[0]:null;
+  return `<span class="pill ${state.key==='risk'?'danger':state.key==='warning'?'warn':'good'}">${state.label}</span>
+    <h2>${esc(t.name)}</h2><div class="detail-owner">Controla: <b style="color:${org.color}">${esc(org.name)}</b> · ${priorityLabel(t.priority)}</div>
+    <div class="detail-block"><div class="detail-label">Reputación</div><div class="rep-row"><div class="rep-bar"><div class="rep-fill" style="width:${reputationPercent(t.reputation)}%"></div></div><b>${reputationLabel(t.reputation)}</b></div></div>
+    <div class="detail-block"><div class="detail-label">Graffitis activos (${active.length})</div><div class="sprays">${[0,1,2].map(i=>sprayHtml(active[i])).join('')}${active.slice(3).map(g=>sprayHtml(g)).join('')}</div><p style="font-size:11px;color:var(--muted);margin:10px 0 0">Próximo vencimiento: ${next?fmtDate(next.expiresAt):'Sin vencimiento'}</p></div>
+    <div class="detail-block"><div class="detail-label">Notas</div><p style="font-size:12px;color:#c7cfdd;line-height:1.55">${esc(t.notes||'Sin notas.')}</p></div>
+    <div class="detail-block"><div class="btn-row"><button class="btn primary" id="addGraffiti">+ Agregar graffiti</button><button class="btn" id="editTerritory">Editar</button><button class="btn danger" id="clearGraffiti">Limpiar</button></div></div>
+    <div class="detail-block"><div class="detail-label">Graffitis</div>${active.length?active.map(g=>`<div class="action-row" style="grid-template-columns:8px 1fr auto"><span class="action-dot" style="background:${hoursUntil(g.expiresAt)<=12?'var(--danger)':hoursUntil(g.expiresAt)<=24?'var(--warn)':'var(--good)'}"></span><div><strong>${fmtDate(g.placedAt)}</strong><p>Vence ${fmtDate(g.expiresAt)}</p></div><button class="btn small danger remove-graffiti" data-id="${g.id}">Quitar</button></div>`).join(''):'<p style="color:var(--muted);font-size:12px">No hay graffitis activos.</p>'}</div>`;
+}
+function sprayHtml(g){if(!g)return '<span class="spray empty"></span>';const h=hoursUntil(g.expiresAt);return `<span class="spray ${h<=12?'danger':h<=24?'warn':''}" title="Vence ${fmtDate(g.expiresAt)}"></span>`}
+function bindOperations(){
+  $$('.map-tab').forEach(b=>b.addEventListener('click',()=>{selectedMapId=b.dataset.map;mapZoom=selectedMapId==='north'?.72:.78;mapPan={x:0,y:0};renderOperations()}));
+  $('#zoomIn').addEventListener('click',()=>setZoom(mapZoom+.12));$('#zoomOut').addEventListener('click',()=>setZoom(mapZoom-.12));$('#zoomReset').addEventListener('click',()=>{mapZoom=selectedMapId==='north'?.72:.78;mapPan={x:0,y:0};updateMapTransform()});
+  $('#movePins').addEventListener('click',()=>{movingPins=!movingPins;toast(movingPins?'Arrastrá los pines para ubicarlos':'Posiciones guardadas');renderOperations()});
+  $('#newTerritory').addEventListener('click',()=>openTerritoryModal(null,selectedMapId));
+  $$('.territory-pin').forEach(pin=>{
+    pin.addEventListener('click',e=>{e.stopPropagation();if(dragState)return;selectedTerritoryId=pin.dataset.territory;renderOperations()});
+    if(movingPins) bindPinDrag(pin);
+  });
+  $$('[data-filter]').forEach(ch=>ch.addEventListener('change',()=>{
+    const allowed=new Set($$('[data-filter]:checked').map(x=>x.dataset.filter));
+    $$('.territory-pin').forEach(pin=>{const t=data.territories.find(x=>x.id===pin.dataset.territory);pin.classList.toggle('muted',!allowed.has(t.priority))});
+  }));
+  const vp=$('#mapViewport');
+  vp.addEventListener('wheel',e=>{e.preventDefault();const rect=vp.getBoundingClientRect();const mx=e.clientX-rect.left,my=e.clientY-rect.top;const old=mapZoom;const next=Math.max(.45,Math.min(2.1,old*(e.deltaY<0?1.1:.9)));mapPan.x=mx-(mx-mapPan.x)*(next/old);mapPan.y=my-(my-mapPan.y)*(next/old);mapZoom=next;updateMapTransform()},{passive:false});
+  vp.addEventListener('pointerdown',e=>{if(e.target.closest('.territory-pin')||movingPins)return;dragState={type:'pan',startX:e.clientX,startY:e.clientY,x:mapPan.x,y:mapPan.y};vp.classList.add('panning');vp.setPointerCapture(e.pointerId)});
+  vp.addEventListener('pointermove',e=>{if(dragState?.type==='pan'){mapPan.x=dragState.x+(e.clientX-dragState.startX);mapPan.y=dragState.y+(e.clientY-dragState.startY);updateMapTransform()}});
+  vp.addEventListener('pointerup',()=>{if(dragState?.type==='pan')dragState=null;vp.classList.remove('panning')});
+  $('#addGraffiti')?.addEventListener('click',()=>addGraffiti(selectedTerritoryId));
+  $('#editTerritory')?.addEventListener('click',()=>openTerritoryModal(selectedTerritoryId));
+  $('#clearGraffiti')?.addEventListener('click',()=>{const t=getTerritory(selectedTerritoryId);if(confirm('¿Eliminar todos los graffitis de este territorio?')){t.graffitis=[];logActivity('Graffitis eliminados',t.name);persist('Graffitis eliminados')}});
+  $$('.remove-graffiti').forEach(b=>b.addEventListener('click',()=>{const t=getTerritory(selectedTerritoryId);t.graffitis=t.graffitis.filter(g=>g.id!==b.dataset.id);persist('Graffiti eliminado')}));
+}
+function bindPinDrag(pin){
+  pin.addEventListener('pointerdown',e=>{e.stopPropagation();const t=getTerritory(pin.dataset.territory);dragState={type:'pin',t,pin};pin.setPointerCapture(e.pointerId)});
+  pin.addEventListener('pointermove',e=>{if(dragState?.type!=='pin'||dragState.pin!==pin)return;const stage=$('#mapStage'),rect=stage.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*100,y=(e.clientY-rect.top)/rect.height*100;dragState.t.x=Math.max(0,Math.min(100,x));dragState.t.y=Math.max(0,Math.min(100,y));pin.style.left=dragState.t.x+'%';pin.style.top=dragState.t.y+'%'});
+  pin.addEventListener('pointerup',()=>{if(dragState?.type==='pin'){saveData(data);dragState=null}});
+}
+function setZoom(z){mapZoom=Math.max(.45,Math.min(2.1,z));updateMapTransform()}
+function updateMapTransform(){const stage=$('#mapStage');if(stage)stage.style.transform=`translate(${mapPan.x}px,${mapPan.y}px) scale(${mapZoom})`;const zr=$('#zoomReset');if(zr)zr.textContent=`${Math.round(mapZoom*100)}%`}
+
+function renderGraffiti(){
+  const root=$('#graffiti');
+  const rows=data.territories.flatMap(t=>activeGraffitis(t).map(g=>({t,g,h:hoursUntil(g.expiresAt)}))).sort((a,b)=>a.h-b.h);
+  root.innerHTML=`<div class="card table-card"><div class="section-card"><div class="section-head"><div><h2>Graffitis activos</h2><p>Todos los vencimientos en un solo lugar.</p></div><button class="btn primary" id="registerTurn">Registrar turno</button></div></div>
+  ${rows.length?`<table class="data-table"><thead><tr><th>Territorio</th><th>Colocado</th><th>Vence</th><th>Tiempo restante</th><th></th></tr></thead><tbody>${rows.map(x=>`<tr><td><b>${esc(x.t.name)}</b></td><td>${fmtDate(x.g.placedAt)}</td><td>${fmtDate(x.g.expiresAt)}</td><td><span class="pill ${x.h<=12?'danger':x.h<=24?'warn':'good'}">${timeHuman(x.h)}</span></td><td><button class="btn small danger" data-remove-g="${x.g.id}" data-t="${x.t.id}">Quitar</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No hay graffitis activos.</div>'}</div>`;
+  $('#registerTurn').addEventListener('click',openTurnModal);
+  $$('[data-remove-g]').forEach(b=>b.addEventListener('click',()=>{const t=getTerritory(b.dataset.t);t.graffitis=t.graffitis.filter(g=>g.id!==b.dataset.removeG);persist('Graffiti eliminado')}));
+}
+function openTurnModal(){
+  const recs=recommendation(data);
+  openModal('Registrar turno',`<p style="color:var(--muted);font-size:12px">Seleccioná un territorio por cada graffiti colocado. Podés registrar hasta ${data.rules.graffitisPerTurn}.</p><div class="form-grid">${Array.from({length:data.rules.graffitisPerTurn},(_,i)=>`<div class="field"><label>Graffiti ${i+1}</label><select class="turn-select"><option value="">No utilizado</option>${data.territories.filter(t=>t.priority!=='ignore').map(t=>`<option value="${t.id}" ${recs[i]?.territory.id===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></div>`).join('')}</div>`,()=>{
+    $$('.turn-select').forEach(s=>{if(s.value)addGraffiti(s.value,false)});logActivity('Turno registrado','Operaciones');persist('Turno registrado');closeModal();
+  });
+}
+function addGraffiti(tid,notify=true){const t=getTerritory(tid);if(!t)return;const placed=new Date();const expires=new Date(placed.getTime()+data.rules.graffitiDurationHours*36e5);t.graffitis=t.graffitis||[];t.graffitis.push({id:uid('g'),placedAt:placed.toISOString(),expiresAt:expires.toISOString()});logActivity('Graffiti agregado',t.name);saveData(data);if(notify)toast(`Graffiti agregado en ${t.name}`);renderCurrent()}
+
+function renderLogistics(){
+  const root=$('#logistics');
+  root.innerHTML=`<div class="section-head"><div><h2>Propiedades</h2><p>Cada propiedad tiene sus propias categorías y objetos.</p></div><button class="btn primary" id="newProperty">+ Nueva propiedad</button></div>
+  ${data.properties.length?`<div class="property-grid">${data.properties.map(p=>propertyCard(p)).join('')}</div>`:'<div class="card empty-state"><h3>Sin propiedades</h3><p>Creá una casa, depósito, galpón o cualquier otro lugar desde acá.</p></div>'}`;
+  $('#newProperty').addEventListener('click',()=>openPropertyModal());
+  $$('.property-card').forEach(c=>c.addEventListener('click',()=>openPropertyDetail(c.dataset.id)));
+}
+function propertyCard(p){const items=(p.categories||[]).flatMap(c=>c.items||[]);return `<div class="card property-card" data-id="${p.id}"><div class="property-icon">${esc(p.icon||'🏠')}</div><h3>${esc(p.name)}</h3><p>${esc(p.type||'Propiedad')} · ${p.categories?.length||0} categorías</p><div class="stock-list"><div class="stock-item"><span>Objetos distintos</span><b>${items.length}</b></div><div class="stock-item"><span>Unidades totales</span><b>${items.reduce((n,i)=>n+(Number(i.quantity)||0),0)}</b></div></div></div>`}
+function openPropertyModal(existing=null){
+  const p=existing||{name:'',type:'Casa',icon:'🏠',notes:''};
+  openModal(existing?'Editar propiedad':'Nueva propiedad',`<div class="form-grid"><div class="field"><label>Nombre</label><input id="pName" value="${esc(p.name)}"></div><div class="field"><label>Tipo</label><input id="pType" value="${esc(p.type)}"></div><div class="field"><label>Icono</label><input id="pIcon" value="${esc(p.icon)}"></div><div class="field full"><label>Notas</label><textarea id="pNotes">${esc(p.notes||'')}</textarea></div></div>`,()=>{
+    const obj=existing||{id:uid('property'),categories:[]};obj.name=$('#pName').value.trim()||'Propiedad';obj.type=$('#pType').value.trim();obj.icon=$('#pIcon').value.trim()||'🏠';obj.notes=$('#pNotes').value.trim();if(!existing)data.properties.push(obj);logActivity(existing?'Propiedad editada':'Propiedad creada',obj.name);persist('Propiedad guardada');closeModal();
+  });
+}
+function openPropertyDetail(id){
+  const p=data.properties.find(x=>x.id===id);if(!p)return;
+  openModal(p.name,`<div class="section-head"><div><p>${esc(p.type||'Propiedad')}</p></div><div class="btn-row"><button class="btn small" id="editP">Editar</button><button class="btn small primary" id="newCategory">+ Categoría</button></div></div><div id="categoryList">${(p.categories||[]).length?p.categories.map(c=>`<div class="card section-card" style="margin-bottom:10px"><div class="section-head"><div><h2>${esc(c.name)}</h2><p>${(c.items||[]).length} objetos</p></div><button class="btn small primary addItem" data-c="${c.id}">+ Objeto</button></div>${(c.items||[]).length?`<table class="data-table"><tbody>${c.items.map(i=>`<tr><td><b>${esc(i.name)}</b><br><small style="color:var(--muted)">${esc(i.unit||'unidades')}</small></td><td style="width:120px"><input class="itemQty" data-c="${c.id}" data-i="${i.id}" type="number" value="${Number(i.quantity)||0}" style="width:90px;background:#0c1018;color:#fff;border:1px solid var(--line);border-radius:8px;padding:7px"></td><td><button class="btn small danger removeItem" data-c="${c.id}" data-i="${i.id}">Quitar</button></td></tr>`).join('')}</tbody></table>`:'<p style="color:var(--muted);font-size:12px">Sin objetos.</p>'}</div>`).join(''):'<div class="empty-state">Todavía no hay categorías.</div>'}</div>`,null,{hideSave:true});
+  $('#editP').addEventListener('click',()=>{closeModal();openPropertyModal(p)});
+  $('#newCategory').addEventListener('click',()=>promptCategory(p));
+  $$('.addItem').forEach(b=>b.addEventListener('click',()=>promptItem(p,b.dataset.c)));
+  $$('.itemQty').forEach(i=>i.addEventListener('change',()=>{const c=p.categories.find(x=>x.id===i.dataset.c),item=c.items.find(x=>x.id===i.dataset.i);item.quantity=Math.max(0,Number(i.value)||0);saveData(data);toast('Cantidad actualizada')}));
+  $$('.removeItem').forEach(b=>b.addEventListener('click',()=>{const c=p.categories.find(x=>x.id===b.dataset.c);c.items=c.items.filter(i=>i.id!==b.dataset.i);saveData(data);closeModal();openPropertyDetail(p.id)}));
+}
+function promptCategory(p){openModal('Nueva categoría',`<div class="field"><label>Nombre</label><input id="catName" placeholder="Armas, materiales, documentos..."></div>`,()=>{p.categories=p.categories||[];p.categories.push({id:uid('cat'),name:$('#catName').value.trim()||'Categoría',items:[]});saveData(data);closeModal();openPropertyDetail(p.id)})}
+function promptItem(p,cid){openModal('Nuevo objeto',`<div class="form-grid"><div class="field"><label>Nombre</label><input id="itemName"></div><div class="field"><label>Cantidad</label><input id="itemQty" type="number" value="0"></div><div class="field"><label>Unidad</label><input id="itemUnit" value="unidades"></div></div>`,()=>{const c=p.categories.find(x=>x.id===cid);c.items.push({id:uid('item'),name:$('#itemName').value.trim()||'Objeto',quantity:Number($('#itemQty').value)||0,unit:$('#itemUnit').value.trim()||'unidades'});saveData(data);closeModal();openPropertyDetail(p.id)})}
+
+function renderEvents(){
+  const root=$('#events');const sorted=[...data.events].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  root.innerHTML=`<div class="section-head"><div><h2>Agenda</h2><p>Turnos, invasiones, cortes y recordatorios.</p></div><button class="btn primary" id="newEvent">+ Nuevo evento</button></div><div class="card table-card">${sorted.length?`<table class="data-table"><thead><tr><th>Evento</th><th>Fecha</th><th>Tipo</th><th>Notas</th><th></th></tr></thead><tbody>${sorted.map(e=>`<tr><td><b>${esc(e.name)}</b></td><td>${fmtDate(e.date)}</td><td><span class="pill">${esc(e.type||'Evento')}</span></td><td>${esc(e.notes||'')}</td><td><button class="btn small danger removeEvent" data-id="${e.id}">Eliminar</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty-state">No hay eventos cargados.</div>'}</div>`;
+  $('#newEvent').addEventListener('click',openEventModal);$$('.removeEvent').forEach(b=>b.addEventListener('click',()=>{data.events=data.events.filter(e=>e.id!==b.dataset.id);persist('Evento eliminado')}));
+}
+function openEventModal(){const local=new Date(Date.now()+36e5);local.setMinutes(local.getMinutes()-local.getTimezoneOffset());openModal('Nuevo evento',`<div class="form-grid"><div class="field"><label>Nombre</label><input id="eName"></div><div class="field"><label>Tipo</label><input id="eType" placeholder="Invasión, corte, reunión..."></div><div class="field"><label>Fecha y hora</label><input id="eDate" type="datetime-local" value="${local.toISOString().slice(0,16)}"></div><div class="field full"><label>Notas</label><textarea id="eNotes"></textarea></div></div>`,()=>{data.events.push({id:uid('event'),name:$('#eName').value.trim()||'Evento',type:$('#eType').value.trim()||'Evento',date:new Date($('#eDate').value).toISOString(),notes:$('#eNotes').value.trim()});logActivity('Evento creado',$('#eName').value);persist('Evento creado');closeModal()})}
+
+function renderBuilder(){
+  const root=$('#builder');const types=[['territories','Territorios'],['organizations','Organizaciones'],['properties','Propiedades']];
+  const list=builderType==='territories'?data.territories:builderType==='organizations'?data.organizations:data.properties;
+  const selected=list.find(x=>x.id===builderSelectedId)||list[0];builderSelectedId=selected?.id||null;
+  root.innerHTML=`<div class="builder-tabs">${types.map(([k,n])=>`<button class="tool-btn ${builderType===k?'active':''}" data-builder="${k}">${n}</button>`).join('')}</div><div class="builder-layout"><div class="card entity-list"><button class="btn primary full" id="builderNew">+ Crear</button><div style="height:8px"></div>${list.map(x=>`<div class="entity-row ${x.id===builderSelectedId?'active':''}" data-entity="${x.id}"><span class="swatch" style="background:${x.color||getOrg(x.ownerId).color||'#778'}"></span><div><strong>${esc(x.name)}</strong><small>${builderType==='territories'?priorityLabel(x.priority):builderType==='organizations'?esc(x.relation||'sin relación'):esc(x.type||'propiedad')}</small></div></div>`).join('')}</div><div class="card form-card">${selected?builderForm(selected):'<div class="empty-state">Creá el primer elemento.</div>'}</div></div>`;
+  $$('[data-builder]').forEach(b=>b.addEventListener('click',()=>{builderType=b.dataset.builder;builderSelectedId=null;renderBuilder()}));
+  $$('.entity-row').forEach(r=>r.addEventListener('click',()=>{builderSelectedId=r.dataset.entity;renderBuilder()}));
+  $('#builderNew').addEventListener('click',()=>{if(builderType==='territories')openTerritoryModal(null,'city');else if(builderType==='organizations')openOrgModal();else openPropertyModal()});
+  bindBuilderForm(selected);
+}
+function builderForm(x){
+  if(builderType==='territories')return `<div class="section-head"><div><h2>${esc(x.name)}</h2><p>Territorio configurable.</p></div><button class="btn danger" id="builderDelete">Eliminar</button></div><div class="form-grid"><div class="field"><label>Nombre</label><input id="bName" value="${esc(x.name)}"></div><div class="field"><label>Mapa</label><select id="bMap">${data.maps.map(m=>`<option value="${m.id}" ${x.mapId===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></div><div class="field"><label>Controla</label><select id="bOwner">${data.organizations.map(o=>`<option value="${o.id}" ${x.ownerId===o.id?'selected':''}>${esc(o.name)}</option>`).join('')}</select></div><div class="field"><label>Prioridad</label><select id="bPriority"><option value="maintain" ${x.priority==='maintain'?'selected':''}>Mantener</option><option value="conquer" ${x.priority==='conquer'?'selected':''}>Conquistar</option><option value="ignore" ${x.priority==='ignore'?'selected':''}>Ignorar</option></select></div><div class="field"><label>Reputación</label><select id="bRep">${[[10,'Muy baja'],[25,'Baja'],[50,'Media'],[75,'Alta'],[100,'Muy alta'],[101,'Conquistado']].map(([v,n])=>`<option value="${v}" ${Number(x.reputation)===v?'selected':''}>${n}</option>`).join('')}</select></div><div class="field full"><label>Notas</label><textarea id="bNotes">${esc(x.notes||'')}</textarea></div></div><div class="btn-row" style="margin-top:14px"><button class="btn primary" id="builderSave">Guardar cambios</button><button class="btn" id="openOnMap">Abrir en mapa</button></div>`;
+  if(builderType==='organizations')return `<div class="section-head"><div><h2>${esc(x.name)}</h2><p>Organización y relación.</p></div><button class="btn danger" id="builderDelete">Eliminar</button></div><div class="form-grid"><div class="field"><label>Nombre</label><input id="bName" value="${esc(x.name)}"></div><div class="field"><label>Color</label><input id="bColor" type="color" value="${x.color||'#777777'}"></div><div class="field"><label>Relación</label><select id="bRelation"><option value="own" ${x.relation==='own'?'selected':''}>Propia</option><option value="allied" ${x.relation==='allied'?'selected':''}>Aliada</option><option value="neutral" ${x.relation==='neutral'?'selected':''}>Neutral</option><option value="hostile" ${x.relation==='hostile'?'selected':''}>Hostil</option><option value="unknown" ${x.relation==='unknown'?'selected':''}>Sin definir</option></select></div></div><div class="btn-row" style="margin-top:14px"><button class="btn primary" id="builderSave">Guardar cambios</button></div>`;
+  return `<div class="section-head"><div><h2>${esc(x.name)}</h2><p>${esc(x.type||'Propiedad')}</p></div><button class="btn danger" id="builderDelete">Eliminar</button></div><p style="color:var(--muted)">Las categorías y objetos se administran desde Logistics.</p><div class="btn-row"><button class="btn" id="openProperty">Abrir propiedad</button></div>`;
+}
+function bindBuilderForm(x){if(!x)return;$('#builderSave')?.addEventListener('click',()=>{x.name=$('#bName').value.trim()||x.name;if(builderType==='territories'){x.mapId=$('#bMap').value;x.ownerId=$('#bOwner').value;x.priority=$('#bPriority').value;x.reputation=Number($('#bRep').value);x.notes=$('#bNotes').value.trim()}else{x.color=$('#bColor').value;x.relation=$('#bRelation').value}persist('Cambios guardados')});$('#builderDelete')?.addEventListener('click',()=>{if(!confirm('¿Eliminar este elemento?'))return;if(builderType==='territories')data.territories=data.territories.filter(t=>t.id!==x.id);else if(builderType==='organizations')data.organizations=data.organizations.filter(o=>o.id!==x.id);else data.properties=data.properties.filter(p=>p.id!==x.id);builderSelectedId=null;persist('Elemento eliminado')});$('#openOnMap')?.addEventListener('click',()=>{selectedTerritoryId=x.id;selectedMapId=x.mapId;navigate('operations')});$('#openProperty')?.addEventListener('click',()=>{navigate('logistics');setTimeout(()=>openPropertyDetail(x.id),0)})}
+function openTerritoryModal(id,mapId='city'){
+  const existing=id?getTerritory(id):null;const t=existing||{name:'',mapId,x:50,y:50,ownerId:'none',priority:'conquer',reputation:10,notes:'',graffitis:[]};
+  openModal(existing?'Editar territorio':'Nuevo territorio',`<div class="form-grid"><div class="field"><label>Nombre</label><input id="tName" value="${esc(t.name)}"></div><div class="field"><label>Mapa</label><select id="tMap">${data.maps.map(m=>`<option value="${m.id}" ${t.mapId===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select></div><div class="field"><label>Controla</label><select id="tOwner">${data.organizations.map(o=>`<option value="${o.id}" ${t.ownerId===o.id?'selected':''}>${esc(o.name)}</option>`).join('')}</select></div><div class="field"><label>Prioridad</label><select id="tPriority"><option value="maintain" ${t.priority==='maintain'?'selected':''}>Mantener</option><option value="conquer" ${t.priority==='conquer'?'selected':''}>Conquistar</option><option value="ignore" ${t.priority==='ignore'?'selected':''}>Ignorar</option></select></div><div class="field"><label>Reputación</label><select id="tRep">${[[10,'Muy baja'],[25,'Baja'],[50,'Media'],[75,'Alta'],[100,'Muy alta'],[101,'Conquistado']].map(([v,n])=>`<option value="${v}" ${Number(t.reputation)===v?'selected':''}>${n}</option>`).join('')}</select></div><div class="field full"><label>Notas</label><textarea id="tNotes">${esc(t.notes||'')}</textarea></div></div>`,()=>{t.name=$('#tName').value.trim()||'Territorio';t.mapId=$('#tMap').value;t.ownerId=$('#tOwner').value;t.priority=$('#tPriority').value;t.reputation=Number($('#tRep').value);t.notes=$('#tNotes').value.trim();if(!existing){t.id=uid('territory');data.territories.push(t)}selectedTerritoryId=t.id;selectedMapId=t.mapId;logActivity(existing?'Territorio editado':'Territorio creado',t.name);persist('Territorio guardado');closeModal()});
+}
+function openOrgModal(){openModal('Nueva organización',`<div class="form-grid"><div class="field"><label>Nombre</label><input id="oName"></div><div class="field"><label>Color</label><input id="oColor" type="color" value="#7a8498"></div><div class="field"><label>Relación</label><select id="oRelation"><option value="neutral">Neutral</option><option value="hostile">Hostil</option><option value="allied">Aliada</option><option value="own">Propia</option></select></div></div>`,()=>{data.organizations.push({id:uid('org'),name:$('#oName').value.trim()||'Organización',color:$('#oColor').value,relation:$('#oRelation').value});persist('Organización creada');closeModal()})}
+
+function renderSettings(){
+  const root=$('#settings');root.innerHTML=`<div class="card form-card"><div class="section-head"><div><h2>Identidad del workspace</h2><p>Todo el branding se puede cambiar sin tocar código.</p></div></div><div class="form-grid"><div class="field"><label>Organización</label><input id="sName" value="${esc(data.workspace.name)}"></div><div class="field"><label>Servidor</label><input id="sServer" value="${esc(data.workspace.server)}"></div><div class="field"><label>Color principal</label><input id="sColor" type="color" value="${data.workspace.color}"></div><div class="field"><label>Inicial / logo textual</label><input id="sLogo" value="${esc(data.workspace.logo||'F')}"></div></div><div class="section-head" style="margin-top:24px"><div><h2>Reglas del servidor</h2><p>Estas reglas alimentan vencimientos y recomendaciones.</p></div></div><div class="form-grid"><div class="field"><label>Duración del graffiti (horas)</label><input id="sDuration" type="number" value="${data.rules.graffitiDurationHours}"></div><div class="field"><label>Graffitis mínimos</label><input id="sRequired" type="number" value="${data.rules.requiredGraffitis}"></div><div class="field"><label>Graffitis por turno</label><input id="sPerTurn" type="number" value="${data.rules.graffitisPerTurn}"></div><div class="field"><label>Horarios (separados por coma)</label><input id="sTurns" value="${data.rules.turns.join(', ')}"></div></div><div class="btn-row" style="margin-top:18px"><button class="btn primary" id="saveSettings">Guardar ajustes</button><button class="btn" id="exportSettings">Exportar workspace</button><button class="btn danger" id="resetSettings">Restablecer demo</button></div></div>`;
+  $('#saveSettings').addEventListener('click',()=>{data.workspace.name=$('#sName').value.trim()||'Organización';data.workspace.server=$('#sServer').value.trim()||'Servidor';data.workspace.color=$('#sColor').value;data.workspace.logo=$('#sLogo').value.trim().slice(0,2)||'F';data.rules.graffitiDurationHours=Math.max(1,Number($('#sDuration').value)||120);data.rules.requiredGraffitis=Math.max(1,Number($('#sRequired').value)||3);data.rules.graffitisPerTurn=Math.max(1,Number($('#sPerTurn').value)||4);data.rules.turns=$('#sTurns').value.split(',').map(x=>x.trim()).filter(x=>/^\d{1,2}:\d{2}$/.test(x));if(!data.rules.turns.length)data.rules.turns=['10:00','22:00'];saveData(data);applyBrand();toast('Ajustes guardados');renderSettings();updateClock()});$('#exportSettings').addEventListener('click',()=>exportData(data));$('#resetSettings').addEventListener('click',()=>{if(confirm('Esto reemplaza los datos locales por la configuración de demostración.')){data=resetData();applyBrand();renderCurrent();toast('Workspace restablecido')}})
+}
+
+function openModal(title,body,onSave,opts={}){const host=$('#modalHost');host.classList.remove('hidden');host.innerHTML=`<div class="modal"><div class="modal-head"><h3>${esc(title)}</h3><button class="icon-btn" id="modalClose">✕</button></div><div class="modal-body">${body}</div><div class="modal-actions">${opts.hideSave?'':'<button class="btn" id="modalCancel">Cancelar</button><button class="btn primary" id="modalSave">Guardar</button>'}</div></div>`;$('#modalClose').addEventListener('click',closeModal);$('#modalCancel')?.addEventListener('click',closeModal);$('#modalSave')?.addEventListener('click',()=>onSave?.())}
+function closeModal(){$('#modalHost').classList.add('hidden');$('#modalHost').innerHTML=''}
+function toast(message){const el=document.createElement('div');el.className='toast';el.textContent=message;$('#toastHost').appendChild(el);setTimeout(()=>el.remove(),2600)}
+function openSearch(){const palette=$('#searchPalette');palette.classList.remove('hidden');palette.innerHTML=`<div class="command-box"><input id="commandInput" placeholder="Buscar territorio, propiedad, organización o evento..." autofocus><div class="command-results" id="commandResults"></div></div>`;const input=$('#commandInput');input.focus();const update=()=>{const q=input.value.toLowerCase().trim();const items=[...data.territories.map(x=>({type:'Territorio',name:x.name,action:()=>{selectedTerritoryId=x.id;selectedMapId=x.mapId;navigate('operations')}})),...data.properties.map(x=>({type:'Propiedad',name:x.name,action:()=>{navigate('logistics');setTimeout(()=>openPropertyDetail(x.id),0)}})),...data.organizations.map(x=>({type:'Organización',name:x.name,action:()=>{builderType='organizations';builderSelectedId=x.id;navigate('builder')}})),...data.events.map(x=>({type:'Evento',name:x.name,action:()=>navigate('events')}))].filter(x=>!q||x.name.toLowerCase().includes(q)).slice(0,12);$('#commandResults').innerHTML=items.length?items.map((x,i)=>`<div class="command-item" data-command="${i}"><b>${esc(x.name)}</b><small>${x.type}</small></div>`).join(''):'<div class="empty-state">Sin resultados</div>';$$('[data-command]').forEach(el=>el.addEventListener('click',()=>{items[Number(el.dataset.command)].action();closeSearch()}))};input.addEventListener('input',update);update()}
+function closeSearch(){$('#searchPalette').classList.add('hidden');$('#searchPalette').innerHTML=''}
+function getTerritory(id){return data.territories.find(t=>t.id===id)}
+function getOrg(id){return data.organizations.find(o=>o.id===id)||{name:'Sin definir',color:'#788296',relation:'unknown'}}
+function priorityLabel(p){return p==='maintain'?'Mantener':p==='conquer'?'Conquistar':'Ignorar'}
+function logActivity(action,target){data.activity.unshift({id:uid('activity'),action,target,date:new Date().toISOString()});data.activity=data.activity.slice(0,100)}
+init();
