@@ -11,3 +11,9 @@ Versión simple y funcional con mapa interactivo, pines arrastrables, graffitis,
 - Activá **Mover pines** y arrastrá cada territorio a su lugar real.
 - Las posiciones se guardan automáticamente en el navegador.
 - Usá **Exportar posiciones** para compartir/coordenar ubicaciones.
+
+
+## v1.5
+- Territorios en foco (Mantener/Conquistar) resaltados.
+- Territorios ignorados con pines tenues/apagados.
+- Mejor contraste visual para lectura rápida del mapa.
