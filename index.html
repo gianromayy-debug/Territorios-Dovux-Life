@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#0a0c12" />
   <title>FactionOS</title>
-  <link rel="stylesheet" href="./css/styles-v1.2.0.css?v=1.2.0" />
+  <link rel="stylesheet" href="./css/styles-v1.3.0.css?v=1.3.0" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -32,6 +32,7 @@
         <button class="nav-item" data-view="graffiti"><span>◉</span><b>Graffitis</b></button>
         <button class="nav-item" data-view="criminal"><span>◆</span><b>Actos delictivos</b></button>
         <div class="nav-section">Logística</div>
+        <button class="nav-item" data-view="business"><span>◇</span><b>Negocios</b></button>
         <button class="nav-item" data-view="logistics"><span>▣</span><b>Propiedades</b></button>
         <div class="nav-section">Gestión</div>
         <button class="nav-item" data-view="events"><span>◷</span><b>Eventos</b></button>
@@ -41,7 +42,7 @@
       </nav>
 
       <div class="sidebar-footer">
-        <span>FactionOS v1.2 · Actos delictivos</span>
+        <span>FactionOS v1.3 · Negocios</span>
         <div class="footer-actions">
           <button id="exportBtn">Exportar</button>
           <label>Importar<input id="importInput" type="file" accept="application/json" hidden /></label>
@@ -69,6 +70,7 @@
       <section id="operations" class="view"></section>
       <section id="graffiti" class="view"></section>
       <section id="criminal" class="view"></section>
+      <section id="business" class="view"></section>
       <section id="logistics" class="view"></section>
       <section id="events" class="view"></section>
       <section id="members" class="view"></section>
@@ -81,6 +83,6 @@
   <div id="modalHost" class="modal-host hidden"></div>
   <div id="searchPalette" class="command-palette hidden"></div>
 
-  <script type="module" src="./js/app-v1.2.0.js?v=1.2.0"></script>
+  <script type="module" src="./js/app-v1.3.0.js?v=1.3.0"></script>
 </body>
 </html>

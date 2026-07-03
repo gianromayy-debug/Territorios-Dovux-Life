@@ -1,5 +1,8 @@
-# FactionOS v1.2 — Actos delictivos
+# FactionOS v1.3 — Negocios
 
-Nueva pestaña para administrar robos medianos, robos grandes y encargos. Cada actividad puede marcarse como realizada y FactionOS calcula automáticamente su próxima disponibilidad.
+Nueva pestaña para gestionar dos circuitos comerciales:
 
-Los actos con regla “una vez por día” quedan disponibles cuando se cumplen ambas condiciones: pasaron 12 horas y comenzó el día siguiente.
+- Venta de armas con descuento automático del inventario.
+- Compra de meta medida en gramos (g), con precios y totales en USD.
+
+La actualización conserva la misma clave de almacenamiento local para mantener los datos existentes.
