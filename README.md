@@ -1,8 +1,11 @@
-# FactionOS v1.3 — Negocios
+# FactionOS v1.4.0 — Reinicio territorial
 
-Nueva pestaña para gestionar dos circuitos comerciales:
+Actualización preparada para el reinicio general de territorios:
 
-- Venta de armas con descuento automático del inventario.
-- Compra de meta medida en gramos (g), con precios y totales en USD.
+- Mapas de **Ciudad** y **Norte** reemplazados por las capturas actuales.
+- Todos los territorios se migran una sola vez al estado **Sin dueño**.
+- Los territorios vacíos requieren **2 graffitis para capturarse**.
+- Los territorios que ya tengan dueño pueden seguir usando una cantidad distinta para mantenimiento (3 por defecto).
+- Se conservan negocios, propiedades, miembros, eventos, inventarios y actos delictivos guardados.
 
-La actualización conserva la misma clave de almacenamiento local para mantener los datos existentes.
+Abrí `index.html` para ejecutar la aplicación.
