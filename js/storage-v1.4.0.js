@@ -1,4 +1,4 @@
-import { DEFAULT_DATA } from './data-v1.4.0.js?v=1.4.0';
+import { DEFAULT_DATA } from './data-v1.4.0.js?v=1.4.2';
 const KEY = 'factionos_workspace_v1';
 const TERRITORY_RESET_REVISION = 1;
 const clone = (v) => JSON.parse(JSON.stringify(v));

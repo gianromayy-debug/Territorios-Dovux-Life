@@ -1,5 +1,5 @@
-import { loadData, saveData, exportData, importData, resetData } from './storage-v1.4.0.js?v=1.4.0';
-import { uid, esc, fmtDate, reputationLabel, reputationPercent, hoursUntil, activeGraffitis, isUnownedTerritory, requiredGraffitisFor, getNextTurn, countdownText, territoryState, recommendation } from './utils-v1.4.0.js?v=1.4.0';
+import { loadData, saveData, exportData, importData, resetData } from './storage-v1.4.0.js?v=1.4.2';
+import { uid, esc, fmtDate, reputationLabel, reputationPercent, hoursUntil, activeGraffitis, isUnownedTerritory, requiredGraffitisFor, getNextTurn, countdownText, territoryState, recommendation } from './utils-v1.4.0.js?v=1.4.2';
 
 let data=loadData();
 let currentView='dashboard';
@@ -7,7 +7,7 @@ let selectedTerritoryId=data.territories[0]?.id||null;
 let selectedMapId='city';
 let movingPins=false;
 let mapZoom=.78;
-let mapPan={x:0,y:0};
+let mapFitZoom=0;
 let dragState=null;
 let builderType='territories';
 let builderSelectedId=null;
@@ -53,6 +53,7 @@ function bindGlobal(){
   });
   $('#modalHost').addEventListener('click',e=>{if(e.target.id==='modalHost')closeModal();});
   $('#searchPalette').addEventListener('click',e=>{if(e.target.id==='searchPalette')closeSearch();});
+  window.addEventListener('resize',()=>{if(currentView==='operations')fitMapToViewport(true)});
 }
 function applyBrand(){
   document.documentElement.style.setProperty('--accent','#ffffff');
@@ -257,13 +258,16 @@ function renderOperations(){
           <div class="legend-row"><span class="legend-color" style="background:#51a8ff"></span>Conquistar<input type="checkbox" data-filter="conquer" checked></div>
           <div class="legend-row"><span class="legend-color" style="background:#6b7488"></span>Ignorar<input type="checkbox" data-filter="ignore" checked></div>
         </div>
-        <div class="map-help"><span>Rueda: zoom</span><span>Arrastrar: mover mapa</span><span>Clic: abrir ficha</span></div>
+        <div class="map-help"><span>Rueda: zoom</span><span>Mapa fijo y centrado</span><span>Clic: abrir ficha</span></div>
       </div>
     </div>
     <aside class="card detail-panel" id="territoryDetail">${selected?territoryDetail(selected):'<div class="detail-empty"><div><h3>Seleccioná un territorio</h3><p>Hacé clic en un punto del mapa para ver sus datos.</p></div></div>'}</aside>
   </div>`;
   bindOperations();
-  updateMapTransform();
+  requestAnimationFrame(()=>{
+    if(!Number.isFinite(mapFitZoom)||mapFitZoom<=0) fitMapToViewport(true);
+    else updateMapTransform();
+  });
 }
 function territoryPin(t){
   const org=getOrg(t.ownerId);const state=territoryState(t,data.rules);const active=activeGraffitis(t).length;const required=requiredGraffitisFor(t,data.rules);
@@ -286,8 +290,10 @@ function territoryDetail(t){
 }
 function sprayHtml(g){if(!g)return '<span class="spray empty"></span>';const h=hoursUntil(g.expiresAt);return `<span class="spray ${h<=12?'danger':h<=24?'warn':''}" title="Vence ${fmtDate(g.expiresAt)}"></span>`}
 function bindOperations(){
-  $$('.map-tab').forEach(b=>b.addEventListener('click',()=>{selectedMapId=b.dataset.map;selectedTerritoryId=data.territories.find(t=>t.mapId===selectedMapId)?.id||null;mapZoom=selectedMapId==='north'?.58:.78;mapPan={x:0,y:0};renderOperations()}));
-  $('#zoomIn').addEventListener('click',()=>setZoom(mapZoom+.12));$('#zoomOut').addEventListener('click',()=>setZoom(mapZoom-.12));$('#zoomReset').addEventListener('click',()=>{mapZoom=selectedMapId==='north'?.58:.78;mapPan={x:0,y:0};updateMapTransform()});
+  $$('.map-tab').forEach(b=>b.addEventListener('click',()=>{selectedMapId=b.dataset.map;selectedTerritoryId=data.territories.find(t=>t.mapId===selectedMapId)?.id||null;mapFitZoom=0;renderOperations();requestAnimationFrame(()=>fitMapToViewport(true))}));
+  $('#zoomIn').addEventListener('click',()=>setZoom(mapZoom+.12));
+  $('#zoomOut').addEventListener('click',()=>setZoom(mapZoom-.12));
+  $('#zoomReset').addEventListener('click',()=>fitMapToViewport(true));
   $('#movePins').addEventListener('click',()=>{movingPins=!movingPins;toast(movingPins?'Arrastrá los pines para ubicarlos':'Posiciones guardadas');renderOperations()});
   $('#newTerritory').addEventListener('click',()=>openTerritoryModal(null,selectedMapId));
   $$('.territory-pin').forEach(pin=>{
@@ -299,10 +305,7 @@ function bindOperations(){
     $$('.territory-pin').forEach(pin=>{const t=data.territories.find(x=>x.id===pin.dataset.territory);pin.classList.toggle('muted',!allowed.has(t.priority))});
   }));
   const vp=$('#mapViewport');
-  vp.addEventListener('wheel',e=>{e.preventDefault();const rect=vp.getBoundingClientRect();const mx=e.clientX-rect.left,my=e.clientY-rect.top;const old=mapZoom;const next=Math.max(.45,Math.min(2.1,old*(e.deltaY<0?1.1:.9)));mapPan.x=mx-(mx-mapPan.x)*(next/old);mapPan.y=my-(my-mapPan.y)*(next/old);mapZoom=next;updateMapTransform()},{passive:false});
-  vp.addEventListener('pointerdown',e=>{if(e.target.closest('.territory-pin')||movingPins)return;dragState={type:'pan',startX:e.clientX,startY:e.clientY,x:mapPan.x,y:mapPan.y};vp.classList.add('panning');vp.setPointerCapture(e.pointerId)});
-  vp.addEventListener('pointermove',e=>{if(dragState?.type==='pan'){mapPan.x=dragState.x+(e.clientX-dragState.startX);mapPan.y=dragState.y+(e.clientY-dragState.startY);updateMapTransform()}});
-  vp.addEventListener('pointerup',()=>{if(dragState?.type==='pan')dragState=null;vp.classList.remove('panning')});
+  vp.addEventListener('wheel',e=>{e.preventDefault();setZoom(mapZoom*(e.deltaY<0?1.1:.9))},{passive:false});
   $('#addGraffiti')?.addEventListener('click',()=>addGraffiti(selectedTerritoryId));
   $('#editTerritory')?.addEventListener('click',()=>openTerritoryModal(selectedTerritoryId));
   $('#clearGraffiti')?.addEventListener('click',()=>{const t=getTerritory(selectedTerritoryId);if(confirm('¿Eliminar todos los graffitis de este territorio?')){t.graffitis=[];logActivity('Graffitis eliminados',t.name);persist('Graffitis eliminados')}});
@@ -313,8 +316,28 @@ function bindPinDrag(pin){
   pin.addEventListener('pointermove',e=>{if(dragState?.type!=='pin'||dragState.pin!==pin)return;const stage=$('#mapStage'),rect=stage.getBoundingClientRect();const x=(e.clientX-rect.left)/rect.width*100,y=(e.clientY-rect.top)/rect.height*100;dragState.t.x=Math.max(0,Math.min(100,x));dragState.t.y=Math.max(0,Math.min(100,y));pin.style.left=dragState.t.x+'%';pin.style.top=dragState.t.y+'%'});
   pin.addEventListener('pointerup',()=>{if(dragState?.type==='pin'){saveData(data);dragState=null}});
 }
-function setZoom(z){mapZoom=Math.max(.45,Math.min(2.1,z));updateMapTransform()}
-function updateMapTransform(){const stage=$('#mapStage');if(stage)stage.style.transform=`translate(${mapPan.x}px,${mapPan.y}px) scale(${mapZoom})`;const zr=$('#zoomReset');if(zr)zr.textContent=`${Math.round(mapZoom*100)}%`}
+function fitMapToViewport(apply=true){
+  const vp=$('#mapViewport'),stage=$('#mapStage');
+  if(!vp||!stage)return;
+  const map=data.maps.find(m=>m.id===selectedMapId)||data.maps[0];
+  const padding=34;
+  const availableW=Math.max(240,vp.clientWidth-padding*2);
+  const availableH=Math.max(240,vp.clientHeight-padding*2);
+  mapFitZoom=Math.min(1,availableW/map.width,availableH/map.height);
+  if(apply)mapZoom=mapFitZoom;
+  updateMapTransform();
+}
+function setZoom(z){
+  const min=Math.max(.3,mapFitZoom*.62);
+  mapZoom=Math.max(min,Math.min(2.1,z));
+  updateMapTransform();
+}
+function updateMapTransform(){
+  const stage=$('#mapStage');
+  if(stage)stage.style.transform=`translate(-50%,-50%) scale(${mapZoom})`;
+  const zr=$('#zoomReset');
+  if(zr)zr.textContent=`${Math.round(mapZoom*100)}%`;
+}
 
 function renderGraffiti(){
   const root=$('#graffiti');

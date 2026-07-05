@@ -1,4 +1,4 @@
-## FactionOS v1.4.1
+## FactionOS v1.4.2
 
 - Actualizados los mapas de Ciudad y Norte con todos los territorios vacíos y bordes blancos.
 - Migración automática y única que elimina propietarios, reputación y graffitis territoriales anteriores.
@@ -14,6 +14,14 @@
 - Módulos de Negocios, Propiedades, Actos delictivos y gestión general.
 
 
-## v1.4.1
+## v1.4.2
 - Corrección del mapa de Ciudad.
 - Se agregaron nuevos nombres de archivo para los mapas (cache-busting) y evitar que el navegador muestre la versión anterior en caché.
+
+
+## v1.4.2
+- Mapas centrados automáticamente dentro del panel.
+- Se deshabilitó el desplazamiento manual de los mapas.
+- El zoom con rueda y botones permanece activo y conserva el centro.
+- El botón de porcentaje vuelve a encajar el mapa en el área visible.
+- Ajuste automático al cambiar el tamaño de la ventana.
