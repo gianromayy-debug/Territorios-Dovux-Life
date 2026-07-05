@@ -32,8 +32,8 @@ export const DEFAULT_DATA = {
     {id:"none",name:"Sin definir",color:"#788296",relation:"unknown"}
   ],
   maps: [
-    {id:"city",name:"Los Santos",src:"./assets/map-city.png",width:992,height:838},
-    {id:"north",name:"Norte / Blaine County",src:"./assets/map-north.png",width:1557,height:989}
+    {id:"city",name:"Los Santos",src:"./assets/map-city-reset.png",width:992,height:838},
+    {id:"north",name:"Norte / Blaine County",src:"./assets/map-north-reset.png",width:1557,height:989}
   ],
   territories: [
     {id:"davis-norte",name:"Davis Norte",mapId:"city",x:61,y:58,ownerId:"none",priority:"conquer",reputation:0,graffitis:[],notes:"Disponible tras el reinicio territorial. Se captura con 2 graffitis."},
