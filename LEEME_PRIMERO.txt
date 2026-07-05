@@ -1,0 +1,9 @@
+FACTIONOS v1.4.3
+
+1. Extrae COMPLETA la carpeta del archivo ZIP.
+2. No abras index.html desde la vista previa interna del ZIP.
+3. Una vez extraído, abre index.html.
+
+Esta versión corrige la carga del diseño y mantiene los mapas centrados, fijos y con zoom.
+
+La app usa un script unificado para funcionar también al abrir index.html directamente.

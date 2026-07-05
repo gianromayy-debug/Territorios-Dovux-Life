@@ -1,4 +1,4 @@
-# FactionOS v1.4.2 — Reinicio territorial
+# FactionOS v1.4.3 — Reinicio territorial
 
 Actualización preparada para el reinicio general de territorios:
 
